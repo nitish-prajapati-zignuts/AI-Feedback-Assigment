@@ -110,7 +110,7 @@ export default function EditActionDialog({ editingItem, onClose, onSave }: EditA
           <div className="space-y-4 md:col-span-2">
             <div className="space-y-1.5">
               <Label htmlFor="owner">Assignee / Owner</Label>
-              <Select value={editOwner} onValueChange={(v) => setEditOwner(v)}>
+              <Select value={editOwner} onValueChange={(v) => setEditOwner(v ?? "")}>
                 <SelectTrigger id="owner" className="h-9 text-xs">
                   <SelectValue placeholder="Select assignee" />
                 </SelectTrigger>

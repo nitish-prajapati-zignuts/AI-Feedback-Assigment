@@ -26,7 +26,13 @@ import {
   Calendar,
   MessageSquare,
   Sparkles,
+  Plus,
+  CheckCircle,
+  Filter,
+  ArrowRight,
+  Search,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import {
   ResponsiveContainer,
   BarChart,
@@ -111,6 +117,7 @@ const STATUS_COLORS = {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [actions, setActions] = useState<GlobalActionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,6 +133,9 @@ export default function DashboardPage() {
   const [unresolvedOnly, setUnresolvedOnly] = useState(false);
   const [highPriorityOnly, setHighPriorityOnly] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Filter panel expand/collapse
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     loadFeedback();
@@ -207,6 +217,26 @@ export default function DashboardPage() {
   ).length;
   const frustrationRate = total ? Math.round((frustratedCount / total) * 100) : 0;
 
+  // Custom KPI ratios
+  const positiveRatio = total ? Math.round((positiveCount / total) * 100) : 0;
+  const criticalCount = filteredFeedbacks.filter(
+    (f) => (f.aiClassification?.priority === "High" || f.aiClassification?.priority === "Critical") && f.status !== "Resolved" && f.status !== "Closed"
+  ).length;
+  const totalActionsCount = actions.length;
+  const actionCompletionRate = totalActionsCount ? Math.round((completedActionsCount / totalActionsCount) * 100) : 0;
+
+  // Active filters tracker
+  const activeFiltersCount = [
+    search ? 1 : 0,
+    categoryFilter !== "All" ? 1 : 0,
+    sourceFilter !== "All" ? 1 : 0,
+    statusFilter !== "All" ? 1 : 0,
+    sentimentFilter !== "All" ? 1 : 0,
+    priorityFilter !== "All" ? 1 : 0,
+    unresolvedOnly ? 1 : 0,
+    highPriorityOnly ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
+
   // Recharts: Category Data
   const categoryChartData = categories
     .map((cat) => ({
@@ -283,48 +313,101 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-7xl mx-auto w-full space-y-6">
+      {/* Welcome Banner / Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-4 rounded-xl border border-border/80 bg-linear-to-r from-card to-muted/20 shadow-xs">
+        <div className="space-y-1">
+          <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+            <span>👋</span>
+            <span>Welcome back, {user?.username || "Admin"}!</span>
+          </h2>
+          <p className="text-xs text-muted-foreground font-medium">
+            Here's the summary of your product feedback and customer success tasks today.
+          </p>
+        </div>
+        <Link href="/chat/create" className="shrink-0">
+          <Button size="sm" className="font-semibold cursor-pointer shadow-xs gap-1.5 flex items-center">
+            <Plus className="h-4 w-4" />
+            Submit Feedback
+          </Button>
+        </Link>
+      </div>
+
       {/* Stats Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 md:gap-3">
-        {/* Stat 1: Total Feedback */}
-        <Card className="p-3.5 flex flex-col justify-between space-y-1 bg-card/60 backdrop-blur-xs border-border/80 shadow-xs">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total Feedback</span>
-          <span className="text-2xl font-bold text-foreground tracking-tight leading-none">{total}</span>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI 1: Total Feedback Volume */}
+        <Card className="p-4 flex flex-col justify-between space-y-3 bg-card border-border/80 shadow-xs relative overflow-hidden group hover:border-border transition-colors">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total Feedback</span>
+              <div className="text-3xl font-bold text-foreground tracking-tight leading-none pt-1">{total}</div>
+            </div>
+            <div className="p-2 bg-primary/10 rounded-lg text-primary">
+              <MessageSquare className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="text-[10px] text-muted-foreground font-medium">
+            Incoming customer channels
+          </div>
         </Card>
 
-        {/* Stat 2: Positive Feedback */}
-        <Card className="p-3.5 flex flex-col justify-between space-y-1 bg-card/60 backdrop-blur-xs border-border/80 border-l-4 border-l-emerald-500 shadow-xs">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Positive</span>
-          <span className="text-2xl font-bold text-emerald-500 tracking-tight leading-none">{positiveCount}</span>
+        {/* KPI 2: Sentiment Index */}
+        <Card className="p-4 flex flex-col justify-between space-y-3 bg-card border-border/80 border-l-4 border-l-emerald-500 shadow-xs relative overflow-hidden group hover:border-border transition-colors">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Sentiment Index</span>
+              <div className="text-3xl font-bold text-emerald-500 tracking-tight leading-none pt-1">{positiveRatio}%</div>
+            </div>
+            <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-500">
+              <TrendingUp className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
+              <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${positiveRatio}%` }} />
+            </div>
+            <div className="text-[10px] text-muted-foreground font-medium flex justify-between">
+              <span>{positiveCount} Positive</span>
+              <span>{total} total</span>
+            </div>
+          </div>
         </Card>
 
-        {/* Stat 3: Negative Feedback */}
-        <Card className="p-3.5 flex flex-col justify-between space-y-1 bg-card/60 backdrop-blur-xs border-border/80 border-l-4 border-l-destructive shadow-xs">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Negative</span>
-          <span className="text-2xl font-bold text-destructive tracking-tight leading-none">{negativeCount}</span>
+        {/* KPI 3: Critical Attention Required */}
+        <Card className="p-4 flex flex-col justify-between space-y-3 bg-card border-border/80 border-l-4 border-l-rose-500 shadow-xs relative overflow-hidden group hover:border-border transition-colors">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Critical Tickets</span>
+              <div className="text-3xl font-bold text-rose-500 tracking-tight leading-none pt-1">{criticalCount}</div>
+            </div>
+            <div className="p-2 bg-rose-500/10 rounded-lg text-rose-500">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="text-[10px] text-muted-foreground font-medium">
+            High & Critical unresolved items
+          </div>
         </Card>
 
-        {/* Stat 4: High Priority */}
-        <Card className="p-3.5 flex flex-col justify-between space-y-1 bg-card/60 backdrop-blur-xs border-border/80 border-l-4 border-l-rose-500 shadow-xs">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">High Priority</span>
-          <span className="text-2xl font-bold text-rose-500 tracking-tight leading-none">{highPriorityCount}</span>
-        </Card>
-
-        {/* Stat 5: Unresolved Feedback */}
-        <Card className="p-3.5 flex flex-col justify-between space-y-1 bg-card/60 backdrop-blur-xs border-border/80 border-l-4 border-l-amber-500 shadow-xs">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Unresolved</span>
-          <span className="text-2xl font-bold text-amber-500 tracking-tight leading-none">{unresolvedFeedbackCount}</span>
-        </Card>
-
-        {/* Stat 6: Open Actions */}
-        <Card className="p-3.5 flex flex-col justify-between space-y-1 bg-card/60 backdrop-blur-xs border-border/80 border-l-4 border-l-blue-500 shadow-xs">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Open Actions</span>
-          <span className="text-2xl font-bold text-blue-500 tracking-tight leading-none">{openActionsCount}</span>
-        </Card>
-
-        {/* Stat 7: Completed Actions */}
-        <Card className="p-3.5 flex flex-col justify-between space-y-1 bg-card/60 backdrop-blur-xs border-border/80 border-l-4 border-l-teal-500 shadow-xs">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Completed</span>
-          <span className="text-2xl font-bold text-teal-500 tracking-tight leading-none">{completedActionsCount}</span>
+        {/* KPI 4: Action completion performance */}
+        <Card className="p-4 flex flex-col justify-between space-y-3 bg-card border-border/80 border-l-4 border-l-teal-500 shadow-xs relative overflow-hidden group hover:border-border transition-colors">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Task Completion</span>
+              <div className="text-3xl font-bold text-teal-500 tracking-tight leading-none pt-1">{actionCompletionRate}%</div>
+            </div>
+            <div className="p-2 bg-teal-500/10 rounded-lg text-teal-500">
+              <Activity className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
+              <div className="bg-teal-500 h-full rounded-full transition-all duration-500" style={{ width: `${actionCompletionRate}%` }} />
+            </div>
+            <div className="text-[10px] text-muted-foreground font-medium flex justify-between">
+              <span>{completedActionsCount} completed</span>
+              <span>{totalActionsCount} actions</span>
+            </div>
+          </div>
         </Card>
       </div>
 
@@ -356,11 +439,30 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Feedback List */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Filters */}
-            <Card>
-              <CardContent className="pt-5 pb-5">
+            {/* Filters Accordion */}
+            <Card className="bg-card border-border/80 shadow-xs">
+              <CardHeader className="py-3 px-5 flex flex-row items-center justify-between border-b border-border/40">
+                <div className="flex items-center gap-2.5">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-semibold">Search & Filters</CardTitle>
+                  {activeFiltersCount > 0 && (
+                    <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 text-[10px] py-0 px-2 font-medium">
+                      {activeFiltersCount} active
+                    </Badge>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="h-7 text-xs font-semibold cursor-pointer hover:bg-muted"
+                >
+                  {showFilters ? "Collapse Filters" : "Expand Filters"}
+                </Button>
+              </CardHeader>
+              <CardContent className={`transition-all duration-200 p-5 ${showFilters ? "block" : "hidden"}`}>
                 <div className="space-y-4">
-                  {/* Unified Filters Grid: 2 columns on mobile, 3 columns on desktop */}
+                  {/* Unified Filters Grid */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     <div className="col-span-2 md:col-span-1 space-y-1">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Search Query</span>
@@ -432,7 +534,7 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Row 3: Quick Filter Flags */}
-                  <div className="flex flex-wrap gap-2 pt-1">
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
                     <button
                       onClick={() => setUnresolvedOnly(!unresolvedOnly)}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold tracking-tight transition-all border cursor-pointer ${
@@ -458,7 +560,7 @@ export default function DashboardPage() {
                     </button>
 
                     {/* Quick reset if any filter active */}
-                    {(search || categoryFilter !== "All" || sourceFilter !== "All" || statusFilter !== "All" || sentimentFilter !== "All" || priorityFilter !== "All" || unresolvedOnly || highPriorityOnly) && (
+                    {activeFiltersCount > 0 && (
                       <button
                         onClick={() => {
                           setSearch("");
@@ -478,14 +580,51 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </CardContent>
+              {!showFilters && (
+                <div className="px-5 py-3 bg-muted/20 border-t border-border/40 text-xs text-muted-foreground flex flex-wrap items-center gap-2">
+                  <Search className="h-3 w-3 text-muted-foreground" />
+                  <span className="font-medium">Active Filters:</span>
+                  {activeFiltersCount === 0 ? (
+                    <span className="italic">None (showing all records)</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {search && <Badge variant="outline" className="text-[10px] py-0 px-1.5">Search: "{search}"</Badge>}
+                      {categoryFilter !== "All" && <Badge variant="outline" className="text-[10px] py-0 px-1.5">{categoryFilter}</Badge>}
+                      {statusFilter !== "All" && <Badge variant="outline" className="text-[10px] py-0 px-1.5">Status: {statusFilter}</Badge>}
+                      {sentimentFilter !== "All" && <Badge variant="outline" className="text-[10px] py-0 px-1.5">Sentiment: {sentimentFilter}</Badge>}
+                      {priorityFilter !== "All" && <Badge variant="outline" className="text-[10px] py-0 px-1.5">Priority: {priorityFilter}</Badge>}
+                      {sourceFilter !== "All" && <Badge variant="outline" className="text-[10px] py-0 px-1.5">Source: {sourceFilter}</Badge>}
+                      {unresolvedOnly && <Badge variant="outline" className="text-[10px] py-0 px-1.5">Unresolved</Badge>}
+                      {highPriorityOnly && <Badge variant="outline" className="text-[10px] py-0 px-1.5">High Priority</Badge>}
+                    </div>
+                  )}
+                  <Button
+                    variant="link"
+                    size="sm"
+                    onClick={() => setShowFilters(true)}
+                    className="h-auto p-0 text-xs font-semibold text-primary ml-auto hover:no-underline"
+                  >
+                    Adjust →
+                  </Button>
+                </div>
+              )}
             </Card>
 
-            {/* Feedback Table */}
+            {/* Feedback Queue Card */}
             <Card className="bg-card border-border/80 shadow-xs">
+              <CardHeader className="py-4 px-5 border-b border-border/40 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm font-semibold">Feedback Queue</CardTitle>
+                  <CardDescription className="text-xs">Latest customer responses requiring triage</CardDescription>
+                </div>
+                <Badge variant="secondary" className="text-xs font-medium">
+                  {filteredFeedbacks.length} items
+                </Badge>
+              </CardHeader>
               <CardContent className="p-0">
                 {loading ? (
                   <div className="flex items-center justify-center p-12">
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                   </div>
                 ) : filteredFeedbacks.length > 0 ? (
                   <>
@@ -497,6 +636,7 @@ export default function DashboardPage() {
                             <TableHead>Title</TableHead>
                             <TableHead>Customer</TableHead>
                             <TableHead>Category</TableHead>
+                            <TableHead>Priority</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
@@ -504,23 +644,45 @@ export default function DashboardPage() {
                         </TableHeader>
                         <TableBody>
                           {filteredFeedbacks.slice(0, 5).map((f) => (
-                            <TableRow key={f.id}>
-                              <TableCell className="font-semibold max-w-[180px] truncate text-primary">{f.title}</TableCell>
+                            <TableRow key={f.id} className="hover:bg-muted/10 transition-colors">
+                              <TableCell className="font-semibold max-w-[200px] truncate text-primary">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                                    style={{
+                                      backgroundColor: SENTIMENT_COLORS[f.aiClassification?.sentiment as keyof typeof SENTIMENT_COLORS] || "#9ca3af"
+                                    }}
+                                    title={`Sentiment: ${f.aiClassification?.sentiment || "Unknown"}`}
+                                  />
+                                  <span className="truncate" title={f.title}>{f.title}</span>
+                                </div>
+                              </TableCell>
                               <TableCell>
-                                <div className="font-medium text-sm">{f.customerName}</div>
-                                <div className="text-xs text-muted-foreground">{f.customerEmail}</div>
+                                <div className="font-medium text-sm text-foreground">{f.customerName}</div>
+                                <div className="text-xs text-muted-foreground truncate max-w-[150px]">{f.customerEmail}</div>
                               </TableCell>
                               <TableCell><Badge variant="outline">{f.category}</Badge></TableCell>
+                              <TableCell>
+                                {f.aiClassification?.priority && (
+                                  <Badge
+                                    variant={f.aiClassification.priority === "Critical" || f.aiClassification.priority === "High" ? "destructive" : "secondary"}
+                                    style={f.aiClassification.priority === "Medium" ? { backgroundColor: "rgba(245, 158, 11, 0.1)", color: "#d97706" } : undefined}
+                                    className="text-[10px] font-semibold"
+                                  >
+                                    {f.aiClassification.priority}
+                                  </Badge>
+                                )}
+                              </TableCell>
                               <TableCell><Badge variant={statusBadgeVariant(f.status)}>{f.status}</Badge></TableCell>
-                              <TableCell className="text-muted-foreground">
+                              <TableCell className="text-muted-foreground text-xs">
                                 {new Date(f.feedbackDate).toLocaleDateString()}
                               </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-1">
-                                  <Link href={`/chat/${f.id}`} className="inline-flex items-center justify-center h-8 w-8 rounded-lg hover:bg-muted transition-colors">
+                                  <Link href={`/chat/${f.id}`} className="inline-flex items-center justify-center h-8 w-8 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
                                     <Eye className="h-4 w-4" />
                                   </Link>
-                                  <Link href={`/chat/${f.id}/edit`} className="inline-flex items-center justify-center h-8 w-8 rounded-lg hover:bg-muted transition-colors">
+                                  <Link href={`/chat/${f.id}/edit`} className="inline-flex items-center justify-center h-8 w-8 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
                                     <Edit2 className="h-4 w-4" />
                                   </Link>
                                   <button
@@ -544,7 +706,7 @@ export default function DashboardPage() {
                           <div className="flex items-start justify-between gap-2">
                             <button
                               onClick={() => router.push(`/chat/${f.id}`)}
-                              className="font-semibold text-xs text-primary hover:underline text-left leading-normal block"
+                              className="font-semibold text-xs text-primary hover:underline text-left leading-normal block flex-1"
                             >
                               📋 {f.title}
                             </button>
@@ -553,20 +715,35 @@ export default function DashboardPage() {
                             </Badge>
                           </div>
 
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <div>
-                              <span className="font-semibold text-foreground text-xs">{f.customerName}</span>
-                              <span className="block text-[10px]">{f.customerEmail}</span>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground gap-2">
+                            <div className="min-w-0">
+                              <span className="font-semibold text-foreground text-xs block truncate">{f.customerName}</span>
+                              <span className="block text-[10px] truncate">{f.customerEmail}</span>
                             </div>
-                            <Badge variant="outline" className="text-[9px] px-1.5 py-0">
-                              {f.category}
-                            </Badge>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {f.aiClassification?.priority && (
+                                <Badge variant={f.aiClassification.priority === "Critical" || f.aiClassification.priority === "High" ? "destructive" : "secondary"} className="text-[8px] px-1 py-0">
+                                  {f.aiClassification.priority}
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                                {f.category}
+                              </Badge>
+                            </div>
                           </div>
 
                           <div className="flex items-center justify-between pt-2 border-t border-border/40">
-                            <span className="text-[10px] text-muted-foreground">
-                              {new Date(f.feedbackDate).toLocaleDateString()}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="w-2 h-2 rounded-full block"
+                                style={{
+                                  backgroundColor: SENTIMENT_COLORS[f.aiClassification?.sentiment as keyof typeof SENTIMENT_COLORS] || "#9ca3af"
+                                }}
+                              />
+                              <span className="text-[10px] text-muted-foreground">
+                                {new Date(f.feedbackDate).toLocaleDateString()}
+                              </span>
+                            </div>
 
                             <div className="flex items-center gap-1">
                               <Link href={`/chat/${f.id}`} className="inline-flex items-center justify-center h-8 w-8 rounded-lg hover:bg-muted transition-colors">
@@ -588,10 +765,10 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Footer navigate to all feedbacks page */}
-                    <div className="p-4 border-t border-border/60 flex flex-col sm:flex-row justify-between items-center bg-muted/10 gap-3">
-                      <span className="text-xs text-muted-foreground">Showing the latest 5 feedback records</span>
+                    <div className="p-4 border-t border-border/40 flex flex-col sm:flex-row justify-between items-center bg-muted/10 gap-3">
+                      <span className="text-xs text-muted-foreground font-medium">Showing the latest 5 feedback records</span>
                       <Link href="/chat/all">
-                        <Button variant="outline" size="sm" className="font-semibold cursor-pointer">
+                        <Button variant="outline" size="sm" className="font-semibold cursor-pointer shadow-xs">
                           View All Feedbacks ({filteredFeedbacks.length}) →
                         </Button>
                       </Link>
@@ -608,10 +785,11 @@ export default function DashboardPage() {
 
           {/* Sidebar Metrics Preview */}
           <div className="space-y-6">
-            <Card>
-              <CardHeader>
+            {/* Donut Sentiment Chart */}
+            <Card className="bg-card border-border/80 shadow-xs">
+              <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">Workspace Overview Chart</CardTitle>
-                <CardDescription>Visual breakdown of sentiment ratio</CardDescription>
+                <CardDescription className="text-xs">Visual breakdown of sentiment ratio</CardDescription>
               </CardHeader>
               <CardContent className="h-56">
                 {sentimentChartData.length > 0 ? (
@@ -650,26 +828,37 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-semibold">Latest Active Tasks</CardTitle>
-                <CardDescription>Follow-up actions needing attention</CardDescription>
+            {/* Checklist of Tasks */}
+            <Card className="bg-card border-border/80 shadow-xs">
+              <CardHeader className="border-b border-border/40 py-3.5 px-4.5 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm font-semibold">Latest Active Tasks</CardTitle>
+                  <CardDescription className="text-[11px]">Follow-up actions needing attention</CardDescription>
+                </div>
+                <Link href="/chat/actions">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs font-medium px-2 flex items-center gap-1 hover:bg-muted text-primary">
+                    Manage
+                    <ArrowRight className="h-3 w-3" />
+                  </Button>
+                </Link>
               </CardHeader>
               <CardContent className="p-0">
                 {actions.length > 0 ? (
-                  <div className="divide-y divide-border text-xs">
+                  <div className="divide-y divide-border/60 text-xs">
                     {actions.slice(0, 5).map((action) => (
-                      <div key={action.id} className="p-3 hover:bg-muted/30 transition-colors flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <p className="font-semibold text-foreground leading-normal">{action.description}</p>
-                          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                            <span>Assignee: <strong>{action.owner}</strong></span>
+                      <div key={action.id} className="p-4 hover:bg-muted/20 transition-colors flex items-start gap-3">
+                        <CheckCircle className={`h-4 w-4 mt-0.5 shrink-0 ${action.status === "Completed" ? "text-emerald-500" : "text-muted-foreground/60"}`} />
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          <p className="font-semibold text-foreground leading-snug break-words">{action.description}</p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                            <span>Assignee: <strong className="text-foreground">{action.owner}</strong></span>
                             <span>•</span>
                             <span>Due: {new Date(action.dueDate).toLocaleDateString()}</span>
                           </div>
                         </div>
                         <Badge
                           variant={action.status === "Completed" ? "default" : action.status === "Blocked" ? "destructive" : "secondary"}
+                          className="text-[9px] font-semibold tracking-tight px-1.5 py-0 shrink-0 uppercase"
                         >
                           {action.status}
                         </Badge>
@@ -679,46 +868,6 @@ export default function DashboardPage() {
                 ) : (
                   <div className="p-6 text-center text-xs text-muted-foreground italic">
                     No active action items.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-semibold">Recently Added Feedback</CardTitle>
-                <CardDescription>The most recent customer submissions</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                {filteredFeedbacks.length > 0 ? (
-                  <div className="divide-y divide-border text-xs">
-                    {[...filteredFeedbacks]
-                      .sort((a, b) => new Date(b.feedbackDate).getTime() - new Date(a.feedbackDate).getTime())
-                      .slice(0, 5)
-                      .map((f) => (
-                        <div key={f.id} className="p-3 hover:bg-muted/30 transition-colors flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <button
-                              onClick={() => router.push(`/chat/${f.id}`)}
-                              className="font-semibold text-foreground hover:text-primary hover:underline text-left leading-normal block"
-                            >
-                              {f.title}
-                            </button>
-                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                              <span>Customer: <strong>{f.customerName}</strong></span>
-                              <span>•</span>
-                              <span>Date: {new Date(f.feedbackDate).toLocaleDateString()}</span>
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="text-[10px]">
-                            {f.category}
-                          </Badge>
-                        </div>
-                      ))}
-                  </div>
-                ) : (
-                  <div className="p-6 text-center text-xs text-muted-foreground italic">
-                    No feedback records.
                   </div>
                 )}
               </CardContent>
