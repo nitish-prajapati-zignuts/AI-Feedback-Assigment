@@ -21,6 +21,7 @@ import {
 
 const navItems = [
   { href: "/chat", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/chat/all", label: "Feedbacks", icon: MessageSquareText },
   { href: "/chat/actions", label: "Actions Tracker", icon: ClipboardList },
   { href: "/chat/create", label: "Submit Feedback", icon: Plus },
 ];
@@ -38,7 +39,10 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
   const isActive = (href: string) => {
     if (href === "/chat") {
-      return pathname === "/chat" || (pathname.startsWith("/chat/") && !pathname.startsWith("/chat/actions") && !pathname.startsWith("/chat/create"));
+      return pathname === "/chat";
+    }
+    if (href === "/chat/all") {
+      return pathname === "/chat/all" || (pathname.startsWith("/chat/") && !pathname.startsWith("/chat/actions") && !pathname.startsWith("/chat/create") && !pathname.startsWith("/chat/all"));
     }
     return pathname.startsWith(href);
   };
@@ -140,7 +144,8 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
               {pathname === "/chat" && "Dashboard"}
               {pathname === "/chat/create" && "Submit Feedback"}
               {pathname === "/chat/actions" && "Actions Tracker"}
-              {pathname.match(/^\/chat\/[^/]+$/) && !pathname.includes("create") && !pathname.includes("actions") && "Feedback Details"}
+              {pathname === "/chat/all" && "Feedbacks"}
+              {pathname.match(/^\/chat\/[^/]+$/) && !pathname.includes("create") && !pathname.includes("actions") && !pathname.includes("all") && "Feedback Details"}
               {pathname.match(/\/edit$/) && "Edit Feedback"}
             </h1>
           </div>
