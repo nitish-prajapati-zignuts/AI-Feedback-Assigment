@@ -91,43 +91,85 @@ function getRotationPolicyApiKeys(): string[] {
 
 import { systemPrompt, buildFeedbackPrompt } from "../utils/aiPrompts";
 
+function toPlainText(text: string): string {
+  if (!text) return "";
+
+  // Strip HTML tags
+  let cleaned = text.replace(/<[^>]*>/g, " ");
+
+  // Unescape common HTML entities
+  const htmlEntities: { [key: string]: string } = {
+    "&nbsp;": " ",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&amp;": "&",
+    "&quot;": '"',
+    "&apos;": "'",
+    "&#39;": "'",
+    "&ndash;": "-",
+    "&mdash;": "-",
+  };
+  Object.keys(htmlEntities).forEach((entity) => {
+    cleaned = cleaned.replace(new RegExp(entity, "g"), htmlEntities[entity]);
+  });
+
+  // Strip Markdown markers
+  cleaned = cleaned.replace(/^#+\s+/gm, "");
+  cleaned = cleaned.replace(/[\*_]{1,3}/g, "");
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+  cleaned = cleaned.replace(/`/g, "");
+  cleaned = cleaned.replace(/^\s*>\s+/gm, "");
+  cleaned = cleaned.replace(/^\s*[-*_]{3,}\s*$/gm, "");
+
+  // Clean spaces/newlines
+  cleaned = cleaned.replace(/[ \t]+/g, " ");
+  cleaned = cleaned.replace(/\n\s*\n+/g, "\n\n");
+
+  return cleaned.trim();
+}
+
 export async function analyzeFeedback(content: string, userCategory: string): Promise<AIAnalysisResult> {
   const primaryGoogleKey = env.GOOGLE_GENERATIVE_AI_API_KEY;
   const rotationKeys = getRotationPolicyApiKeys().filter((key) => key !== primaryGoogleKey);
   const geminiFallbackKey = env.GEMINI_FALL_BACK_KEY;
 
-  const promptText = buildFeedbackPrompt(content, userCategory);
+  const sanitizedContent = toPlainText(content);
+  const promptText = buildFeedbackPrompt(sanitizedContent, userCategory);
 
   try {
     // ========================================================
     // 1. TRY PRIMARY GOOGLE KEY FIRST
     // ========================================================
-    if (primaryGoogleKey) {
-      try {
-        console.log("Attempting feedback analysis with Primary Google Key...");
-        const googleProvider = createGoogleGenerativeAI({ apiKey: primaryGoogleKey });
-        const { object } = await generateObject({
-          model: googleProvider("gemini-3.5-flash-lite"),
-          schema: aiAnalysisResultSchema,
-          prompt: promptText,
-          system: systemPrompt,
-        } as any);
-
-        if (!object) {
-          throw new Error("Model generated empty analysis result.");
-        }
-        return object as AIAnalysisResult;
-      } catch (primaryError: any) {
-        console.warn(`Primary Google Key failed: ${primaryError?.message || primaryError}. Proceeding to Key Rotation policy...`);
-      }
+    if (!primaryGoogleKey) {
+      throw new Error("Primary Google Key is not configured.");
     }
 
-    // ========================================================
-    // 2. TRY ROTATING KEYS POLICY (RPI: GEMINI_API_KEYS)
-    // ========================================================
-    if (rotationKeys.length > 0) {
-      console.log(`Attempting Key Rotation Policy across ${rotationKeys.length} key(s)...`);
+    console.log("Attempting feedback analysis with Primary Google Key...");
+    const googleProvider = createGoogleGenerativeAI({ apiKey: primaryGoogleKey });
+    const { object } = await generateObject({
+      model: googleProvider("gemini-3.5-flash-lite"),
+      schema: aiAnalysisResultSchema,
+      prompt: promptText,
+      system: systemPrompt,
+    } as any);
 
+    if (!object) {
+      throw new Error("Model generated empty analysis result.");
+    }
+    return object as AIAnalysisResult;
+
+  } catch (primaryError: any) {
+    console.warn(`Primary Google Key failed: ${primaryError?.message || primaryError}. Proceeding to Key Rotation policy...`);
+
+    try {
+      // ========================================================
+      // 2. TRY ROTATING KEYS POLICY (RPI: GEMINI_API_KEYS)
+      // ========================================================
+      if (rotationKeys.length === 0) {
+        throw new Error("No rotating keys configured.");
+      }
+
+      console.log(`Attempting Key Rotation Policy across ${rotationKeys.length} key(s)...`);
       for (let i = 0; i < rotationKeys.length; i++) {
         const apiKey = rotationKeys[i];
         if (!apiKey) continue;
@@ -149,100 +191,100 @@ export async function analyzeFeedback(content: string, userCategory: string): Pr
           return object as AIAnalysisResult;
         } catch (rotError: any) {
           console.warn(`Rotating Key #${i + 1} (${maskedKey}) failed: ${rotError?.message || rotError}`);
+          if (i === rotationKeys.length - 1) {
+            throw new Error("All rotating keys failed.");
+          }
+        }
+      }
+      throw new Error("Exhausted all rotating keys without success.");
+
+    } catch (rotationError: any) {
+      console.warn(`Key Rotation failed: ${rotationError?.message || rotationError}. Proceeding to Fallback/OpenAI fallback policy...`);
+
+      // ========================================================
+      // 3. FALLBACK PLAN (GEMINI_FALL_BACK_KEY in Error Catch Block)
+      // ========================================================
+      if (geminiFallbackKey) {
+        try {
+          console.log("Attempting Fallback Model Key (GEMINI_FALL_BACK_KEY)...");
+          const googleProvider = createGoogleGenerativeAI({ apiKey: geminiFallbackKey });
+          const { object } = await generateObject({
+            model: googleProvider("gemini-1.5-flash"),
+            schema: aiAnalysisResultSchema,
+            prompt: promptText,
+            system: systemPrompt,
+          } as any);
+
+          if (!object) {
+            throw new Error("Model generated empty analysis result.");
+          }
+          return object as AIAnalysisResult;
+        } catch (fallbackError: any) {
+          console.error("Fallback Model Key (GEMINI_FALL_BACK_KEY) failed:", fallbackError?.message || fallbackError);
+          if (env.OPENAI_API_KEY) {
+            try {
+              console.log("Attempting OpenAI Fallback...");
+              const { object } = await generateObject({
+                model: openai("gpt-4o-mini"),
+                schema: aiAnalysisResultSchema,
+                prompt: promptText,
+                system: systemPrompt,
+              } as any);
+
+              if (!object) {
+                throw new Error("Model generated empty analysis result.");
+              }
+              return object as AIAnalysisResult;
+            } catch (err: any) {
+              console.error("❌ [OpenAI Fallback Exception] OpenAI call failed:", err?.message || err);
+            }
+          }
         }
       }
     }
 
-    // If both Primary and Rotation Keys failed/exhausted, throw error to trigger Fallback catch block
-    throw new Error("All Primary and Rotating Gemini API keys failed or were exhausted.");
-  } catch (error: any) {
     // ========================================================
-    // 3. FALLBACK PLAN (GEMINI_FALL_BACK_KEY in Error Catch Block)
+    // 5. LAST RESORT: HEURISTIC GENERATOR
     // ========================================================
-    if (geminiFallbackKey) {
-      try {
-        console.log("Primary & Rotating keys failed. Attempting Fallback Model Key (GEMINI_FALL_BACK_KEY)...");
-        const googleProvider = createGoogleGenerativeAI({ apiKey: geminiFallbackKey });
-        const { object } = await generateObject({
-          model: googleProvider("gemini-1.5-flash"),
-          schema: aiAnalysisResultSchema,
-          prompt: promptText,
-          system: systemPrompt,
-        } as any);
-
-        if (!object) {
-          throw new Error("Model generated empty analysis result.");
-        }
-        return object as AIAnalysisResult;
-      } catch (fallbackError: any) {
-        console.error("Fallback Model Key (GEMINI_FALL_BACK_KEY) failed:", fallbackError?.message || fallbackError);
-      }
-    }
-  }
-
-  // ========================================================
-  // 4. TRY OPENAI FALLBACK
-  // ========================================================
-  if (env.OPENAI_API_KEY) {
-    try {
-      console.log("Attempting OpenAI Fallback...");
-      const { object } = await generateObject({
-        model: openai("gpt-4o-mini"),
-        schema: aiAnalysisResultSchema,
-        prompt: promptText,
-        system: systemPrompt,
-      } as any);
-
-      if (!object) {
-        throw new Error("Model generated empty analysis result.");
-      }
-      return object as AIAnalysisResult;
-    } catch (err: any) {
-      console.error("❌ [OpenAI Fallback Exception] OpenAI call failed:", err?.message || err);
-    }
-  }
-
-  // ========================================================
-  // 5. LAST RESORT: HEURISTIC GENERATOR
-  // ========================================================
-  console.warn("🚨 All Gemini and OpenAI API keys failed or were missing. Returning fallback evaluation.");
-  return {
-    summary: {
-      mainConcern: "No AI keys succeeded. Main content starts with: " + content.substring(0, 50) + "...",
-      importantDetails: "Please check your Backend/.env configuration to fix API key issues.",
-      expectations: "Manual review of customer content is suggested.",
-      impact: "Unknown. Complete content: " + content.substring(0, 100),
-      suggestedNextSteps: "Check developer logs for details.",
-    },
-    classification: {
-      category: (userCategory as any) || "Other",
-      feedbackType: "General Feedback",
-      sentiment: "Neutral",
-      priority: "Medium",
-      productArea: "Fallback System",
-    },
-    sentimentAnalysis: {
-      overallTone: "Neutral",
-      score: 50,
-      breakdown: {
-        positive: 0,
-        neutral: 100,
-        concerned: 0,
-        heated: 0,
+    console.warn("🚨 All Gemini and OpenAI API keys failed or were missing. Returning fallback evaluation.");
+    return {
+      summary: {
+        mainConcern: "No AI keys succeeded. Main content starts with: " + content.substring(0, 50) + "...",
+        importantDetails: "Please check your Backend/.env configuration to fix API key issues.",
+        expectations: "Manual review of customer content is suggested.",
+        impact: "Unknown. Complete content: " + content.substring(0, 100),
+        suggestedNextSteps: "Check developer logs for details.",
       },
-    },
-    aiFeatureRequests: [],
-    aiActionItems: [
-      {
-        description: "Configure Gemini API keys to receive real live actions",
-        owner: "Engineering Team",
-        priority: "High",
-        daysToComplete: 1
-      }
-    ],
-    insights: [
-      "All active AI service queries returned errors.",
-      "System loaded hardcoded placeholder analysis."
-    ],
-  };
+      classification: {
+        category: (userCategory as any) || "Other",
+        feedbackType: "General Feedback",
+        sentiment: "Neutral",
+        priority: "Medium",
+        productArea: "Fallback System",
+      },
+      sentimentAnalysis: {
+        overallTone: "Neutral",
+        score: 50,
+        breakdown: {
+          positive: 0,
+          neutral: 100,
+          concerned: 0,
+          heated: 0,
+        },
+      },
+      aiFeatureRequests: [],
+      aiActionItems: [
+        {
+          description: "Configure Gemini API keys to receive real live actions",
+          owner: "Engineering Team",
+          priority: "High",
+          daysToComplete: 1
+        }
+      ],
+      insights: [
+        "All active AI service queries returned errors.",
+        "System loaded hardcoded placeholder analysis."
+      ],
+    };
+  }
 }

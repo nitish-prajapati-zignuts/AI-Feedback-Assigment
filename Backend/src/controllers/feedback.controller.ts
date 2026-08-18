@@ -6,6 +6,43 @@ import { AuthenticatedRequest } from "../middleware/auth";
 import { z } from "zod";
 import { analyzeFeedback } from "../services/ai";
 
+function cleanContent(text: string): string {
+  if (!text) return "";
+  
+  // 1. Strip HTML tags
+  let cleaned = text.replace(/<[^>]*>/g, " ");
+  
+  // 2. Unescape common HTML entities
+  const htmlEntities: { [key: string]: string } = {
+    "&nbsp;": " ",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&amp;": "&",
+    "&quot;": '"',
+    "&apos;": "'",
+    "&#39;": "'",
+    "&ndash;": "-",
+    "&mdash;": "-",
+  };
+  Object.keys(htmlEntities).forEach((entity) => {
+    cleaned = cleaned.replace(new RegExp(entity, "g"), htmlEntities[entity]);
+  });
+
+  // 3. Strip Markdown markers
+  cleaned = cleaned.replace(/^#+\s+/gm, "");
+  cleaned = cleaned.replace(/[\*_]{1,3}/g, "");
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+  cleaned = cleaned.replace(/`/g, "");
+  cleaned = cleaned.replace(/^\s*>\s+/gm, "");
+  cleaned = cleaned.replace(/^\s*[-*_]{3,}\s*$/gm, "");
+
+  // 4. Clean extra spacing and double newlines
+  cleaned = cleaned.replace(/[ \t]+/g, " ");
+  cleaned = cleaned.replace(/\n\s*\n+/g, "\n\n");
+
+  return cleaned.trim();
+}
+
 const feedbackSchema = z.object({
   title: z.string().min(1, "Title is required"),
   customerName: z.string().min(1, "Customer name is required"),
@@ -38,9 +75,10 @@ const feedbackSchema = z.object({
 export const createFeedback = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const body = feedbackSchema.parse(req.body);
+    const sanitizedContent = cleanContent(body.content);
 
     // Call AI analysis
-    const aiResult = await analyzeFeedback(body.content, body.category);
+    const aiResult = await analyzeFeedback(sanitizedContent, body.category);
 
     const [newRecord] = await db.insert(feedback).values({
       userId: req.userId!,
@@ -49,7 +87,7 @@ export const createFeedback = async (req: AuthenticatedRequest, res: Response): 
       customerEmail: body.customerEmail,
       feedbackDate: body.feedbackDate,
       source: body.source,
-      content: body.content,
+      content: sanitizedContent,
       category: body.category,
       status: body.status,
       aiSummary: aiResult.summary,
@@ -178,6 +216,9 @@ export const updateFeedback = async (req: AuthenticatedRequest, res: Response): 
     // Regenerate AI analysis if text or category fields change
     let aiUpdate = {};
     if (body.content !== undefined || body.category !== undefined) {
+      if (body.content !== undefined) {
+        body.content = cleanContent(body.content);
+      }
       const targetContent = body.content !== undefined ? body.content : existing.content;
       const targetCategory = body.category !== undefined ? body.category : existing.category;
       const aiResult = await analyzeFeedback(targetContent, targetCategory);
