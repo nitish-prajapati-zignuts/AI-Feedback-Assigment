@@ -39,6 +39,13 @@ export interface Feedback {
     priority: string;
     status: string;
   }[];
+  aiActionItems?: {
+    id: string;
+    description: string;
+    owner: string;
+    priority: "Low" | "Medium" | "High";
+    daysToComplete?: number;
+  }[];
   aiInsights?: string[];
 }
 

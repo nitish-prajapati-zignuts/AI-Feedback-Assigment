@@ -48,6 +48,7 @@ export const feedback = pgTable("feedback", {
   aiClassification: jsonb("ai_classification"),
   aiSentimentAnalysis: jsonb("ai_sentiment_analysis"),
   aiFeatureRequests: jsonb("ai_feature_requests"),
+  aiActionItems: jsonb("ai_action_items"),
   aiInsights: jsonb("ai_insights"),
   isDeleted: boolean("is_deleted").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),

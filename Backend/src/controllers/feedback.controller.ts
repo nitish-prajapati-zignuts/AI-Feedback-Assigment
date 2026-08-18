@@ -69,6 +69,13 @@ const feedbackSchema = z.object({
     "Other"
   ]),
   status: z.enum(["New", "Under Review", "In Progress", "Resolved", "Closed"]).default("New"),
+  aiSummary: z.object({
+    mainConcern: z.string().optional().default(""),
+    importantDetails: z.string().optional().default(""),
+    expectations: z.string().optional().default(""),
+    impact: z.string().optional().default(""),
+    suggestedNextSteps: z.string().optional().default(""),
+  }).optional(),
 });
 
 // Create Feedback
@@ -79,6 +86,14 @@ export const createFeedback = async (req: AuthenticatedRequest, res: Response): 
 
     // Call AI analysis
     const aiResult = await analyzeFeedback(sanitizedContent, body.category);
+
+    const suggestedActions = (aiResult.aiActionItems || []).map((item) => ({
+      id: Math.random().toString(36).substring(2, 15),
+      description: item.description,
+      owner: item.owner || "Unassigned",
+      priority: item.priority || "Medium",
+      daysToComplete: item.daysToComplete || 7,
+    }));
 
     const [newRecord] = await db.insert(feedback).values({
       userId: req.userId!,
@@ -95,24 +110,8 @@ export const createFeedback = async (req: AuthenticatedRequest, res: Response): 
       aiSentimentAnalysis: aiResult.sentimentAnalysis,
       aiFeatureRequests: aiResult.aiFeatureRequests,
       aiInsights: aiResult.insights,
+      aiActionItems: suggestedActions,
     }).returning();
-
-    // Populate auto-generated action items into the database
-    if (aiResult.aiActionItems && aiResult.aiActionItems.length > 0) {
-      const actionRows = aiResult.aiActionItems.map((item) => {
-        const dueDate = new Date();
-        dueDate.setDate(dueDate.getDate() + (item.daysToComplete || 7));
-        return {
-          feedbackId: newRecord.id,
-          description: item.description,
-          owner: item.owner || "Unassigned",
-          dueDate,
-          priority: (item.priority === "High" || item.priority === "Medium" || item.priority === "Low") ? item.priority : "Medium",
-          status: "Open" as const,
-        };
-      });
-      await db.insert(actionItems).values(actionRows);
-    }
 
     res.status(201).json(newRecord);
   } catch (error) {
@@ -222,35 +221,22 @@ export const updateFeedback = async (req: AuthenticatedRequest, res: Response): 
       const targetContent = body.content !== undefined ? body.content : existing.content;
       const targetCategory = body.category !== undefined ? body.category : existing.category;
       const aiResult = await analyzeFeedback(targetContent, targetCategory);
+      const suggestedActions = (aiResult.aiActionItems || []).map((item) => ({
+        id: Math.random().toString(36).substring(2, 15),
+        description: item.description,
+        owner: item.owner || "Unassigned",
+        priority: item.priority || "Medium",
+        daysToComplete: item.daysToComplete || 7,
+      }));
+
       aiUpdate = {
         aiSummary: aiResult.summary,
         aiClassification: aiResult.classification,
         aiSentimentAnalysis: aiResult.sentimentAnalysis,
         aiFeatureRequests: aiResult.aiFeatureRequests,
         aiInsights: aiResult.insights,
+        aiActionItems: suggestedActions,
       };
-
-      // Optionally refresh AI actions if updated:
-      if (aiResult.aiActionItems && aiResult.aiActionItems.length > 0) {
-        // Clear previous actions first via soft delete flag
-        await db.update(actionItems)
-          .set({ isDeleted: true, updatedAt: new Date() })
-          .where(eq(actionItems.feedbackId, id));
-
-        const actionRows = aiResult.aiActionItems.map((item) => {
-          const dueDate = new Date();
-          dueDate.setDate(dueDate.getDate() + (item.daysToComplete || 7));
-          return {
-            feedbackId: id,
-            description: item.description,
-            owner: item.owner || "Unassigned",
-            dueDate,
-            priority: (item.priority === "High" || item.priority === "Medium" || item.priority === "Low") ? item.priority : "Medium",
-            status: "Open" as const,
-          };
-        });
-        await db.insert(actionItems).values(actionRows);
-      }
     }
 
     const [updatedRecord] = await db.update(feedback)

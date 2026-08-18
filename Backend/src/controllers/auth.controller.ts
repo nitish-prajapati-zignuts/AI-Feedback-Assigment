@@ -130,3 +130,20 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response): 
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+export const getAllUsers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const allUsers = await db.query.users.findMany({
+      columns: {
+        id: true,
+        username: true,
+        email: true,
+      },
+    });
+    res.json(allUsers);
+  } catch (error) {
+    console.error("Get all users error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+

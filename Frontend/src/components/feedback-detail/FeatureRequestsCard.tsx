@@ -15,7 +15,7 @@ export default function FeatureRequestsCard({ feedback }: FeatureRequestsCardPro
       </CardHeader>
       <CardContent>
         {feedback.aiFeatureRequests?.length ? (
-          <div className="space-y-3 max-h-[320px] overflow-y-auto pr-2">
+          <div className="space-y-3 max-h-[380px] overflow-y-auto pr-2">
             {feedback.aiFeatureRequests.map((req, idx) => (
               <div key={idx} className="p-3 bg-muted/30 rounded-lg border border-border/40 space-y-1.5">
                 <div className="flex justify-between items-start gap-2">

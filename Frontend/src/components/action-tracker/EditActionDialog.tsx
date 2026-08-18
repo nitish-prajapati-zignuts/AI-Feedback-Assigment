@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import RichTextEditor from "@/components/RichTextEditor";
 import { GlobalActionItem } from "./types";
+import { axiosInstance } from "@/lib/axios";
 
 interface EditActionDialogProps {
   editingItem: GlobalActionItem | null;
@@ -23,12 +24,25 @@ interface EditActionDialogProps {
 }
 
 export default function EditActionDialog({ editingItem, onClose, onSave }: EditActionDialogProps) {
+  const [users, setUsers] = useState<{ id: string; username: string }[]>([]);
   const [editDesc, setEditDesc] = useState("");
   const [editOwner, setEditOwner] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
   const [editPriority, setEditPriority] = useState<"Low" | "Medium" | "High">("Medium");
   const [editStatus, setEditStatus] = useState<"Open" | "In Progress" | "Blocked" | "Completed">("Open");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const res = await axiosInstance.get<{ id: string; username: string }[]>("/auth/users");
+        setUsers(res.data);
+      } catch (err) {
+        console.error("Failed to fetch users:", err);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   useEffect(() => {
     if (editingItem) {
@@ -96,13 +110,19 @@ export default function EditActionDialog({ editingItem, onClose, onSave }: EditA
           <div className="space-y-4 md:col-span-2">
             <div className="space-y-1.5">
               <Label htmlFor="owner">Assignee / Owner</Label>
-              <Input
-                id="owner"
-                value={editOwner}
-                onChange={(e) => setEditOwner(e.target.value)}
-                placeholder="Assignee name"
-                className="text-xs"
-              />
+              <Select value={editOwner} onValueChange={(v) => setEditOwner(v)}>
+                <SelectTrigger id="owner" className="h-9 text-xs">
+                  <SelectValue placeholder="Select assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Unassigned">Unassigned</SelectItem>
+                  {users.map((user) => (
+                    <SelectItem key={user.id} value={user.username}>
+                      {user.username}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1.5">

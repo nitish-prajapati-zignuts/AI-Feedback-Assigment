@@ -49,14 +49,19 @@ export default function FeedbackDetailsPage({ params }: { params: Promise<{ id: 
 
       <AIAnalysisCards feedback={feedback} />
 
-      <FeedbackAndSummary feedback={feedback} />
+      <FeedbackAndSummary feedback={feedback} onReloadFeedback={loadFeedback} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <FeatureRequestsCard feedback={feedback} />
         <InternalNotesCard feedbackId={id} />
       </div>
 
-      <ActionItemsSection feedbackId={id} feedbackTitle={feedback.title} />
+      <ActionItemsSection
+        feedbackId={id}
+        feedbackTitle={feedback.title}
+        aiActionItems={feedback.aiActionItems}
+        onReloadFeedback={loadFeedback}
+      />
     </div>
   );
 }

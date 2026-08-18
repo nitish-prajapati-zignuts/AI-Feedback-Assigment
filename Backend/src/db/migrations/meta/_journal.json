@@ -71,6 +71,13 @@
       "when": 1787040982754,
       "tag": "0009_volatile_the_captain",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787052633904,
+      "tag": "0010_tense_star_brand",
+      "breakpoints": true
     }
   ]
 }
