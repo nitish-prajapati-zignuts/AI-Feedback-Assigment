@@ -1,0 +1,11 @@
+{
+  "name": "assignment-workspace",
+  "version": "1.4.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -n \"Backend,Frontend\" -c \"cyan,magenta\" \"npm run dev --prefix Backend\" \"npm run dev --prefix Frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

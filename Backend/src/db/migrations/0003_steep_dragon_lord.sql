@@ -1,0 +1,1 @@
+ALTER TABLE "feedback" ADD COLUMN "ai_feature_requests" jsonb;

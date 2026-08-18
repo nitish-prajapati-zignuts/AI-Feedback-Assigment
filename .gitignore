@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.next/
+.env
+*.local
+*.tsbuildinfo
+.DS_Store
+Backend/node_modules/
+backend/node_modules/
+Frontend/node_modules/
+frontend/node_modules/
+Backend/dist/
+backend/dist/
+Frontend/.next/
+frontend/.next/
+Backend/.env
+backend/.env
