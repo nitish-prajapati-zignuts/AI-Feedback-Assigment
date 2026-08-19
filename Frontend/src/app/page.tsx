@@ -1,26 +1,36 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { Loader2 } from "lucide-react";
 
 export default function Home() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, refreshUser } = useAuth();
   const router = useRouter();
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    if (!isLoading) {
+    const verifySession = async () => {
+      await refreshUser();
+      setChecking(false);
+    };
+    verifySession();
+  }, [refreshUser]);
+
+  useEffect(() => {
+    if (!checking && !isLoading) {
       if (user) {
         router.push("/chat");
       } else {
         router.push("/login");
       }
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading, checking, router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-50">
-      <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-50 border-t-transparent" />
+    <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
     </div>
   );
 }

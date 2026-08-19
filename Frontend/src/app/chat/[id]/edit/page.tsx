@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowLeft } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
+import { useAuth } from "@/context/AuthContext";
 
 interface Feedback {
   id: string;
@@ -32,6 +33,7 @@ interface Feedback {
 export default function EditFeedbackPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const { refreshUser } = useAuth();
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -90,6 +92,7 @@ export default function EditFeedbackPage({ params }: { params: Promise<{ id: str
     setDeleting(true);
     try {
       await axiosInstance.delete(`/feedback/${id}`);
+      await refreshUser();
       router.push("/chat");
     } catch (err: any) {
       setFormError(err.message || "Failed to delete feedback");
@@ -101,8 +104,38 @@ export default function EditFeedbackPage({ params }: { params: Promise<{ id: str
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div className="h-4 bg-muted shimmer rounded-sm w-24 animate-pulse" />
+        <Card className="bg-card border-border/80 shadow-xs">
+          <CardHeader>
+            <div className="h-6 bg-muted shimmer rounded-sm w-1/3" />
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <div className="h-3.5 bg-muted shimmer rounded-sm w-20" />
+              <div className="h-10 bg-muted shimmer rounded-lg w-full" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="h-3.5 bg-muted shimmer rounded-sm w-24" />
+                <div className="h-10 bg-muted shimmer rounded-lg w-full" />
+              </div>
+              <div className="space-y-2">
+                <div className="h-3.5 bg-muted shimmer rounded-sm w-24" />
+                <div className="h-10 bg-muted shimmer rounded-lg w-full" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="h-10 bg-muted shimmer rounded-lg" />
+              <div className="h-10 bg-muted shimmer rounded-lg" />
+              <div className="h-10 bg-muted shimmer rounded-lg" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-3.5 bg-muted shimmer rounded-sm w-28" />
+              <div className="h-10 bg-muted shimmer rounded-lg w-full" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

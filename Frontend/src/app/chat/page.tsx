@@ -33,6 +33,7 @@ import {
   Search,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { triggerPlanCheckout } from "@/lib/payment";
 import {
   ResponsiveContainer,
   BarChart,
@@ -117,7 +118,10 @@ const STATUS_COLORS = {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const feedbackCount = user?.usage?.feedbackCount || 0;
+  const feedbackLimit = user?.usage?.feedbackLimit || 5;
+  const isLimitReached = feedbackCount >= feedbackLimit;
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [actions, setActions] = useState<GlobalActionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -179,6 +183,7 @@ export default function DashboardPage() {
       await axiosInstance.delete(`/feedback/${deleteId}`);
       setDeleteId(null);
       loadFeedback();
+      await refreshUser();
     } catch (err) {
       console.error("Failed to delete:", err);
     }
@@ -324,13 +329,48 @@ export default function DashboardPage() {
             Here's the summary of your product feedback and customer success tasks today.
           </p>
         </div>
-        <Link href="/chat/create" className="shrink-0">
-          <Button size="sm" className="font-semibold cursor-pointer shadow-xs gap-1.5 flex items-center">
+        {isLimitReached ? (
+          <Button size="sm" disabled className="font-semibold shadow-xs gap-1.5 flex items-center bg-muted text-muted-foreground cursor-not-allowed opacity-55">
             <Plus className="h-4 w-4" />
-            Submit Feedback
+            Submit Feedback (Limit Reached)
           </Button>
-        </Link>
+        ) : (
+          <Link href="/chat/create" className="shrink-0">
+            <Button size="sm" className="font-semibold cursor-pointer shadow-xs gap-1.5 flex items-center">
+              <Plus className="h-4 w-4" />
+              Submit Feedback
+            </Button>
+          </Link>
+        )}
       </div>
+
+      {isLimitReached && (
+        <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-500/5 text-rose-500 text-xs font-semibold leading-normal flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <p className="font-bold">⚠️ Subscription Limit Reached</p>
+            <p className="font-medium text-muted-foreground">
+              You have used all {feedbackLimit} feedbacks available on your **{user?.plan || "Free"}** plan. Upgrade your subscription to continue generating feedback.
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="destructive"
+              className="font-bold cursor-pointer h-7 text-[10px]"
+              onClick={() => triggerPlanCheckout("Standard", () => window.location.reload())}
+            >
+              Upgrade to Standard
+            </Button>
+            <Button
+              size="sm"
+              className="font-bold cursor-pointer h-7 text-[10px] bg-primary text-primary-foreground border border-border"
+              onClick={() => triggerPlanCheckout("Pro", () => window.location.reload())}
+            >
+              Upgrade to Pro
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Stats Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -623,8 +663,22 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent className="p-0">
                 {loading ? (
-                  <div className="flex items-center justify-center p-12">
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  <div className="p-5 space-y-5">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className="flex items-center justify-between gap-4 py-1 border-b border-border/40 last:border-0">
+                        <div className="flex items-center gap-3 w-1/3">
+                          <div className="w-3 h-3 rounded-full shimmer shrink-0" />
+                          <div className="h-4 bg-muted shimmer rounded-sm w-full" />
+                        </div>
+                        <div className="space-y-1 w-1/4">
+                          <div className="h-3.5 bg-muted shimmer rounded-sm w-3/4" />
+                          <div className="h-2.5 bg-muted shimmer rounded-sm w-1/2" />
+                        </div>
+                        <div className="h-5 bg-muted shimmer rounded-full w-16" />
+                        <div className="h-5 bg-muted shimmer rounded-full w-12" />
+                        <div className="h-4 bg-muted shimmer rounded-sm w-20" />
+                      </div>
+                    ))}
                   </div>
                 ) : filteredFeedbacks.length > 0 ? (
                   <>
@@ -785,6 +839,90 @@ export default function DashboardPage() {
 
           {/* Sidebar Metrics Preview */}
           <div className="space-y-6">
+            {/* Plan Usage & Limits Card */}
+            {user?.usage && (
+              <Card className="bg-card border-border/80 shadow-xs relative overflow-hidden">
+                <CardHeader className="pb-3 border-b border-border/40">
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-sm font-semibold">Usage & Plan Limits</CardTitle>
+                    <Badge className="bg-primary text-primary-foreground font-bold text-[10px] uppercase px-2 py-0.5">
+                      {user.plan || "Free"} Plan
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs">Your current workspace resources usage</CardDescription>
+                </CardHeader>
+                <CardContent className="p-4 space-y-4 text-xs">
+                  {/* Feedback Limit */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between font-medium">
+                      <span>Feedbacks</span>
+                      <span>
+                        {user.usage.feedbackCount} / {user.usage.feedbackLimit >= 9999 ? "∞" : user.usage.feedbackLimit}
+                      </span>
+                    </div>
+                    <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          (user.usage.feedbackCount / user.usage.feedbackLimit) >= 0.9
+                            ? "bg-rose-500"
+                            : (user.usage.feedbackCount / user.usage.feedbackLimit) >= 0.7
+                            ? "bg-amber-500"
+                            : "bg-primary"
+                        }`}
+                        style={{
+                          width: `${Math.min(100, (user.usage.feedbackCount / (user.usage.feedbackLimit || 1)) * 100)}%`
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Switch Plan billing simulation */}
+                  <div className="pt-3 border-t border-border/40 mt-1 space-y-2">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
+                      Choose / Upgrade Plan (1 Year)
+                    </span>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {["Free", "Standard", "Pro"].map((p) => (
+                        <button
+                          key={p}
+                          onClick={async () => {
+                            if (p === "Free") {
+                              try {
+                                await axiosInstance.put("/auth/plan", { plan: "Free" });
+                                window.location.reload();
+                              } catch (err) {
+                                console.error("Failed to downgrade plan", err);
+                              }
+                            } else {
+                              triggerPlanCheckout(p as "Standard" | "Pro", () => {
+                                window.location.reload();
+                              });
+                            }
+                          }}
+                          className={`py-1 rounded-md text-[10px] font-bold border transition-all cursor-pointer ${
+                            user?.plan === p
+                              ? "bg-primary border-primary text-primary-foreground shadow-xs"
+                              : "bg-transparent border-border/80 text-muted-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Upgrade Notification */}
+                  {user.plan !== "Pro" && (
+                    <div className="p-3 bg-primary/5 rounded-lg border border-primary/10">
+                      <p className="text-[10px] text-muted-foreground leading-normal font-medium">
+                        Nearing limits? Switch to **Standard** (25 Feedbacks) or **Pro** (Unlimited) to expand your workspace capacity.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Donut Sentiment Chart */}
             <Card className="bg-card border-border/80 shadow-xs">
               <CardHeader className="pb-2">

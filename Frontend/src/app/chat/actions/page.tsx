@@ -88,8 +88,16 @@ export default function ActionsTrackerPage() {
       <ActionsHeader viewMode={viewMode} setViewMode={setViewMode} />
 
       {loading ? (
-        <div className="flex-1 flex items-center justify-center p-24">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+        <div className="flex-1 space-y-4 p-5 border border-border/80 bg-card rounded-xl">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="flex items-center justify-between gap-4 py-2 border-b border-border/40 last:border-0">
+              <div className="h-4 bg-muted shimmer rounded-sm w-1/3" />
+              <div className="h-4 bg-muted shimmer rounded-sm w-1/6" />
+              <div className="h-4 bg-muted shimmer rounded-sm w-1/8" />
+              <div className="h-5 bg-muted shimmer rounded-full w-16" />
+              <div className="h-5 bg-muted shimmer rounded-full w-12" />
+            </div>
+          ))}
         </div>
       ) : actions.length === 0 ? (
         <Card className="flex-1 text-center p-12 flex flex-col justify-center">

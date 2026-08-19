@@ -2,11 +2,11 @@ import { Request, Response } from "express";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { db } from "../db/index";
-import { users } from "../db/schema";
-import { eq } from "drizzle-orm";
 import { env } from "../config";
 import { AuthenticatedRequest } from "../middleware/auth";
+import { BaseController } from "./base.controller";
+import { IUsersRepository, IFeedbackRepository, IActionItemsRepository } from "../db/repositories/interfaces";
+import { container } from "../di";
 
 const JWT_SECRET = env.JWT_SECRET;
 
@@ -21,129 +21,163 @@ const registerSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-export const registerUser = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const body = registerSchema.parse(req.body);
+export class AuthController extends BaseController {
+  private usersRepo: IUsersRepository;
 
-    const existingUser = await db.query.users.findFirst({
-      where: eq(users.username, body.username),
-    });
-
-    if (existingUser) {
-      res.status(400).json({ error: "Username already taken" });
-      return;
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(body.password, salt);
-
-    const [newUser] = await db.insert(users).values({
-      username: body.username,
-      email: body.email,
-      passwordHash,
-    }).returning();
-
-    const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, { expiresIn: "7d" });
-
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-
-    res.status(201).json({
-      message: "Registration successful",
-      user: { id: newUser.id, username: newUser.username, email: newUser.email },
-    });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
-      return;
-    }
-    console.error("Register error:", error);
-    res.status(500).json({ error: "Internal server error" });
+  constructor(usersRepo: IUsersRepository) {
+    super();
+    this.usersRepo = usersRepo;
   }
-};
 
-export const loginUser = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const body = authSchema.parse(req.body);
+  registerUser = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = registerSchema.parse(req.body);
 
-    const user = await db.query.users.findFirst({
-      where: eq(users.username, body.username),
-    });
+      const existingUser = await this.usersRepo.findByUsername(body.username);
 
-    if (!user) {
-      res.status(400).json({ error: "Invalid username or password" });
-      return;
+      if (existingUser) {
+        this.badRequest(res, "Username already taken");
+        return;
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(body.password, salt);
+
+      const newUser = await this.usersRepo.create(body.username, body.email, passwordHash);
+
+      const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, { expiresIn: "7d" });
+
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      });
+
+      this.created(res, {
+        message: "Registration successful",
+        user: { id: newUser.id, username: newUser.username, email: newUser.email },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        this.badRequest(res, error.errors[0].message);
+        return;
+      }
+      this.serverError(res, error, "Register error:");
     }
+  };
 
-    const isMatch = await bcrypt.compare(body.password, user.passwordHash);
-    if (!isMatch) {
-      res.status(400).json({ error: "Invalid username or password" });
-      return;
+  loginUser = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = authSchema.parse(req.body);
+
+      const user = await this.usersRepo.findByUsername(body.username);
+
+      if (!user) {
+        this.badRequest(res, "Invalid username or password");
+        return;
+      }
+
+      const isMatch = await bcrypt.compare(body.password, user.passwordHash);
+      if (!isMatch) {
+        this.badRequest(res, "Invalid username or password");
+        return;
+      }
+
+      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
+
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      this.ok(res, {
+        message: "Login successful",
+        user: { id: user.id, username: user.username, email: user.email },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        this.badRequest(res, error.errors[0].message);
+        return;
+      }
+      this.serverError(res, error, "Login error:");
     }
+  };
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
+  logoutUser = (req: Request, res: Response): void => {
+    res.clearCookie("token");
+    this.ok(res, { message: "Logged out successfully" });
+  };
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+  getUserProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const user = await this.usersRepo.findById(req.userId!);
 
-    res.status(200).json({
-      message: "Login successful",
-      user: { id: user.id, username: user.username, email: user.email },
-    });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
-      return;
+      if (!user) {
+        this.notFound(res, "User not found");
+        return;
+      }
+
+      // Check for subscription plan expiration (1 year duration)
+      if (user.plan && user.plan !== "Free" && user.planExpiresAt) {
+        const expiry = new Date(user.planExpiresAt);
+        if (expiry < new Date()) {
+          user.plan = "Free";
+          user.planExpiresAt = null;
+          await this.usersRepo.update(user.id, { plan: "Free", planExpiresAt: null });
+        }
+      }
+
+      // Resolve repositories from container to get current counts
+      const feedbackRepo = container.resolve<IFeedbackRepository>("feedbackRepository");
+      const feedbacks = await feedbackRepo.findManyByUser(user.id);
+      const feedbackCount = feedbacks.length;
+      let feedbackLimit = 5;
+
+      if (user.plan === "Standard") {
+        feedbackLimit = 25;
+      } else if (user.plan === "Pro") {
+        feedbackLimit = 9999;
+      }
+      this.ok(res, {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        plan: user.plan || "Free",
+        planExpiresAt: user.planExpiresAt,
+        usage: {
+          feedbackCount,
+          feedbackLimit,
+        }
+      });
+    } catch (error) {
+      this.serverError(res, error, "Profile retrieval error:");
     }
-    console.error("Login error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+  };
 
-export const logoutUser = (req: Request, res: Response): void => {
-  res.clearCookie("token");
-  res.status(200).json({ message: "Logged out successfully" });
-};
-
-export const getUserProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, req.userId!),
-    });
-
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
+  getAllUsers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const allUsers = await this.usersRepo.findAll();
+      this.ok(res, allUsers);
+    } catch (error) {
+      this.serverError(res, error, "Get all users error:");
     }
+  };
 
-    res.json({ id: user.id, username: user.username, email: user.email });
-  } catch (error) {
-    console.error("Profile retrieval error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+  updateUserPlan = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { plan } = req.body;
+      if (plan !== "Free" && plan !== "Standard" && plan !== "Pro") {
+        this.badRequest(res, "Invalid plan selection");
+        return;
+      }
 
-export const getAllUsers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const allUsers = await db.query.users.findMany({
-      columns: {
-        id: true,
-        username: true,
-        email: true,
-      },
-    });
-    res.json(allUsers);
-  } catch (error) {
-    console.error("Get all users error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
+      await this.usersRepo.update(req.userId!, { plan });
+      this.ok(res, { message: "Plan updated successfully", plan });
+    } catch (error) {
+      this.serverError(res, error, "Failed to update plan:");
+    }
+  };
+}

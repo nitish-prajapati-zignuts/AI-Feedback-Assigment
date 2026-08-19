@@ -60,9 +60,9 @@ export default function ActionsKanbanView({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col md:grid md:grid-cols-4 md:gap-4 md:h-full w-full space-y-2 md:space-y-0">
+    <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-4 lg:gap-4 lg:h-full w-full space-y-2 lg:space-y-0">
       {/* Kanban Mobile Switcher */}
-      <div className="flex md:hidden border border-border bg-muted/40 p-1.5 rounded-lg space-x-1 w-full mb-2 shrink-0">
+      <div className="flex lg:hidden border border-border bg-muted/40 p-1.5 rounded-lg space-x-1 w-full mb-2 shrink-0">
         {statuses.map((s) => (
           <button
             key={s}
@@ -85,8 +85,8 @@ export default function ActionsKanbanView({
           <div
             key={status}
             className={`${
-              isVisibleOnMobile ? "flex" : "hidden md:flex"
-            } bg-muted/30 rounded-xl border border-border p-3 space-y-3 flex flex-col h-[480px] md:h-full min-h-0`}
+              isVisibleOnMobile ? "flex" : "hidden lg:flex"
+            } bg-muted/30 rounded-xl border border-border p-3 space-y-3 flex flex-col h-[480px] lg:h-full min-h-0`}
           >
             {/* Column Header */}
             <div className="flex items-center justify-between px-1 shrink-0">

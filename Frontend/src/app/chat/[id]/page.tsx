@@ -33,8 +33,28 @@ export default function FeedbackDetailsPage({ params }: { params: Promise<{ id: 
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+      <div className="max-w-7xl mx-auto w-full space-y-6">
+        {/* Header Shimmer */}
+        <div className="h-16 bg-muted shimmer rounded-xl" />
+
+        {/* Metrics Grid Shimmer */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="h-24 bg-muted shimmer rounded-xl" />
+          <div className="h-24 bg-muted shimmer rounded-xl" />
+          <div className="h-24 bg-muted shimmer rounded-xl" />
+        </div>
+
+        {/* Content Shimmer */}
+        <div className="h-48 bg-muted shimmer rounded-xl" />
+
+        {/* Grid Columns Shimmer */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="h-36 bg-muted shimmer rounded-xl" />
+          <div className="h-36 bg-muted shimmer rounded-xl" />
+        </div>
+
+        {/* Action Items Shimmer */}
+        <div className="h-40 bg-muted shimmer rounded-xl" />
       </div>
     );
   }

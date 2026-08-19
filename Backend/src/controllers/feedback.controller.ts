@@ -1,17 +1,17 @@
 import { Response } from "express";
-import { db } from "../db/index";
-import { feedback, actionItems, internalNotes } from "../db/schema";
-import { eq, and, like, or, SQL } from "drizzle-orm";
 import { AuthenticatedRequest } from "../middleware/auth";
 import { z } from "zod";
 import { analyzeFeedback } from "../services/ai";
+import { BaseController } from "./base.controller";
+import { IFeedbackRepository } from "../db/repositories/interfaces";
+import { container } from "../di";
 
 function cleanContent(text: string): string {
   if (!text) return "";
-  
+
   // 1. Strip HTML tags
   let cleaned = text.replace(/<[^>]*>/g, " ");
-  
+
   // 2. Unescape common HTML entities
   const htmlEntities: { [key: string]: string } = {
     "&nbsp;": " ",
@@ -78,149 +78,45 @@ const feedbackSchema = z.object({
   }).optional(),
 });
 
-// Create Feedback
-export const createFeedback = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const body = feedbackSchema.parse(req.body);
-    const sanitizedContent = cleanContent(body.content);
+export class FeedbackController extends BaseController {
+  private feedbackRepo: IFeedbackRepository;
 
-    // Call AI analysis
-    const aiResult = await analyzeFeedback(sanitizedContent, body.category);
-
-    const suggestedActions = (aiResult.aiActionItems || []).map((item) => ({
-      id: Math.random().toString(36).substring(2, 15),
-      description: item.description,
-      owner: item.owner || "Unassigned",
-      priority: item.priority || "Medium",
-      daysToComplete: item.daysToComplete || 7,
-    }));
-
-    const [newRecord] = await db.insert(feedback).values({
-      userId: req.userId!,
-      title: body.title,
-      customerName: body.customerName,
-      customerEmail: body.customerEmail,
-      feedbackDate: body.feedbackDate,
-      source: body.source,
-      content: sanitizedContent,
-      category: body.category,
-      status: body.status,
-      aiSummary: aiResult.summary,
-      aiClassification: aiResult.classification,
-      aiSentimentAnalysis: aiResult.sentimentAnalysis,
-      aiFeatureRequests: aiResult.aiFeatureRequests,
-      aiInsights: aiResult.insights,
-      aiActionItems: suggestedActions,
-    }).returning();
-
-    res.status(201).json(newRecord);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
-      return;
-    }
-    console.error("Create feedback error:", error);
-    res.status(500).json({ error: "Internal server error" });
+  constructor(feedbackRepo: IFeedbackRepository) {
+    super();
+    this.feedbackRepo = feedbackRepo;
   }
-};
 
-// Get Feedback List (with search & filters)
-export const getFeedbackList = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { search, category, source, status } = req.query;
+  // Create Feedback
+  createFeedback = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const body = feedbackSchema.parse(req.body);
 
-    const conditions: SQL[] = [
-      eq(feedback.userId, req.userId!),
-      eq(feedback.isDeleted, false)
-    ];
-
-    if (category) {
-      conditions.push(eq(feedback.category, category as any));
-    }
-    if (source) {
-      conditions.push(eq(feedback.source, source as any));
-    }
-    if (status) {
-      conditions.push(eq(feedback.status, status as any));
-    }
-    if (search) {
-      const searchPattern = `%${search}%`;
-      conditions.push(
-        or(
-          like(feedback.title, searchPattern),
-          like(feedback.customerName, searchPattern),
-          like(feedback.content, searchPattern)
-        ) as SQL
-      );
-    }
-
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
-    const records = await db.query.feedback.findMany({
-      where: and(...conditions),
-      orderBy: (feedback, { desc }) => [desc(feedback.createdAt)],
-      limit: limit && !isNaN(limit) ? limit : undefined,
-    });
-
-    res.json(records);
-  } catch (error) {
-    console.error("Get feedback list error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// Get Feedback Details
-export const getFeedbackDetails = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-
-    const record = await db.query.feedback.findFirst({
-      where: and(
-        eq(feedback.id, id),
-        eq(feedback.userId, req.userId!),
-        eq(feedback.isDeleted, false)
-      ),
-    });
-
-    if (!record) {
-      res.status(404).json({ error: "Feedback record not found" });
-      return;
-    }
-
-    res.json(record);
-  } catch (error) {
-    console.error("Get feedback details error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// Update Feedback
-export const updateFeedback = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const body = feedbackSchema.partial().parse(req.body);
-
-    const existing = await db.query.feedback.findFirst({
-      where: and(
-        eq(feedback.id, id),
-        eq(feedback.userId, req.userId!),
-        eq(feedback.isDeleted, false)
-      ),
-    });
-
-    if (!existing) {
-      res.status(404).json({ error: "Feedback record not found" });
-      return;
-    }
-
-    // Regenerate AI analysis if text or category fields change
-    let aiUpdate = {};
-    if (body.content !== undefined || body.category !== undefined) {
-      if (body.content !== undefined) {
-        body.content = cleanContent(body.content);
+      // Resolve user repository to fetch current plan
+      const usersRepo = container.resolve<any>("usersRepository");
+      const user = await usersRepo.findById(req.userId!);
+      if (!user) {
+        this.notFound(res, "User not found");
+        return;
       }
-      const targetContent = body.content !== undefined ? body.content : existing.content;
-      const targetCategory = body.category !== undefined ? body.category : existing.category;
-      const aiResult = await analyzeFeedback(targetContent, targetCategory);
+
+      const activeFeedbacks = await this.feedbackRepo.findManyByUser(req.userId!);
+      let limit = 5;
+      if (user.plan === "Standard") {
+        limit = 25;
+      } else if (user.plan === "Pro") {
+        limit = 9999;
+      }
+
+      if (activeFeedbacks.length >= limit) {
+        this.badRequest(res, `Feedback limit reached for your plan (${limit} maximum). Please upgrade your account.`);
+        return;
+      }
+
+      const sanitizedContent = cleanContent(body.content);
+
+      // Call AI analysis
+      const aiResult = await analyzeFeedback(sanitizedContent, body.category);
+
       const suggestedActions = (aiResult.aiActionItems || []).map((item) => ({
         id: Math.random().toString(36).substring(2, 15),
         description: item.description,
@@ -229,70 +125,123 @@ export const updateFeedback = async (req: AuthenticatedRequest, res: Response): 
         daysToComplete: item.daysToComplete || 7,
       }));
 
-      aiUpdate = {
-        aiSummary: aiResult.summary,
-        aiClassification: aiResult.classification,
-        aiSentimentAnalysis: aiResult.sentimentAnalysis,
-        aiFeatureRequests: aiResult.aiFeatureRequests,
-        aiInsights: aiResult.insights,
-        aiActionItems: suggestedActions,
-      };
+      const newRecord = await this.feedbackRepo.create(
+        req.userId!,
+        { ...body, content: sanitizedContent },
+        aiResult,
+        suggestedActions
+      );
+
+      this.created(res, newRecord);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        this.badRequest(res, error.errors[0].message);
+        return;
+      }
+      this.serverError(res, error, "Create feedback error:");
     }
+  };
 
-    const [updatedRecord] = await db.update(feedback)
-      .set({
-        ...body,
-        ...aiUpdate,
-        updatedAt: new Date(),
-      })
-      .where(eq(feedback.id, id))
-      .returning();
+  // Get Feedback List (with search & filters)
+  getFeedbackList = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { search, category, source, status, limit } = req.query;
 
-    res.json(updatedRecord);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
-      return;
+      const parsedLimit = limit ? parseInt(limit as string) : undefined;
+      const records = await this.feedbackRepo.findManyByUser(req.userId!, {
+        search: search as string,
+        category: category as string,
+        source: source as string,
+        status: status as string,
+        limit: parsedLimit && !isNaN(parsedLimit) ? parsedLimit : undefined,
+      });
+
+      this.ok(res, records);
+    } catch (error) {
+      this.serverError(res, error, "Get feedback list error:");
     }
-    console.error("Update feedback error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+  };
 
-// Delete Feedback
-export const deleteFeedback = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
+  // Get Feedback Details
+  getFeedbackDetails = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
 
-    const existing = await db.query.feedback.findFirst({
-      where: and(
-        eq(feedback.id, id),
-        eq(feedback.userId, req.userId!),
-        eq(feedback.isDeleted, false)
-      ),
-    });
+      const record = await this.feedbackRepo.findByIdAndUser(id, req.userId!);
 
-    if (!existing) {
-      res.status(404).json({ error: "Feedback record not found" });
-      return;
+      if (!record) {
+        this.notFound(res, "Feedback record not found");
+        return;
+      }
+
+      this.ok(res, record);
+    } catch (error) {
+      this.serverError(res, error, "Get feedback details error:");
     }
+  };
 
-    // Soft delete: set isDeleted = true and cascade to associated action items and internal notes
-    await db.update(feedback)
-      .set({ isDeleted: true, updatedAt: new Date() })
-      .where(eq(feedback.id, id));
+  // Update Feedback
+  updateFeedback = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const body = feedbackSchema.partial().parse(req.body);
 
-    await db.update(actionItems)
-      .set({ isDeleted: true, updatedAt: new Date() })
-      .where(eq(actionItems.feedbackId, id));
+      const existing = await this.feedbackRepo.findByIdAndUser(id, req.userId!);
 
-    await db.update(internalNotes)
-      .set({ isDeleted: true, updatedAt: new Date() })
-      .where(eq(internalNotes.feedbackId, id));
+      if (!existing) {
+        this.notFound(res, "Feedback record not found");
+        return;
+      }
 
-    res.json({ message: "Feedback record deleted successfully" });
-  } catch (error) {
-    console.error("Delete feedback error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+      // Regenerate AI analysis if text or category fields change
+      let aiUpdate = {};
+      if (body.content !== undefined || body.category !== undefined) {
+        if (body.content !== undefined) {
+          body.content = cleanContent(body.content);
+        }
+        const targetContent = body.content !== undefined ? body.content : existing.content;
+        const targetCategory = body.category !== undefined ? body.category : existing.category;
+        const aiResult = await analyzeFeedback(targetContent, targetCategory);
+        const suggestedActions = (aiResult.aiActionItems || []).map((item) => ({
+          id: Math.random().toString(36).substring(2, 15),
+          description: item.description,
+          owner: item.owner || "Unassigned",
+          priority: item.priority || "Medium",
+          daysToComplete: item.daysToComplete || 7,
+        }));
+
+        aiUpdate = {
+          aiSummary: aiResult.summary,
+          aiClassification: aiResult.classification,
+          aiSentimentAnalysis: aiResult.sentimentAnalysis,
+          aiFeatureRequests: aiResult.aiFeatureRequests,
+          aiInsights: aiResult.insights,
+          aiActionItems: suggestedActions,
+        };
+      }
+
+      const updatedRecord = await this.feedbackRepo.update(id, body, aiUpdate);
+      this.ok(res, updatedRecord);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        this.badRequest(res, error.errors[0].message);
+        return;
+      }
+      this.serverError(res, error, "Update feedback error:");
+    }
+  };
+
+  // Delete Feedback
+  deleteFeedback = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      // soft deletes and cascades logic is entirely encapsulated in repository
+      await this.feedbackRepo.delete(id, req.userId!);
+
+      this.ok(res, { message: "Feedback record deleted successfully" });
+    } catch (error) {
+      this.serverError(res, error, "Delete feedback error:");
+    }
+  };
+}

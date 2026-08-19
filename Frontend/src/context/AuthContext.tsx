@@ -9,6 +9,12 @@ export interface User {
   id: string;
   username: string;
   email: string;
+  plan?: string;
+  planExpiresAt?: Date | string | null;
+  usage?: {
+    feedbackCount: number;
+    feedbackLimit: number;
+  };
 }
 
 interface AuthContextType {
@@ -18,6 +24,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check if session exists on load
     const checkSession = async () => {
       try {
-        const res = await axiosInstance.get<{ id: string; username: string; email: string }>("/auth/me");
+        const res = await axiosInstance.get<User>("/auth/me");
         setUser(res.data);
         useUserStore.getState().setUser(res.data);
       } catch {
@@ -103,6 +110,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const refreshUser = async () => {
+    try {
+      const res = await axiosInstance.get<User>("/auth/me");
+      setUser(res.data);
+      useUserStore.getState().setUser(res.data);
+    } catch (err) {
+      console.error("Failed to refresh user:", err);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -112,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         register,
         logout,
+        refreshUser,
       }}
     >
       {children}

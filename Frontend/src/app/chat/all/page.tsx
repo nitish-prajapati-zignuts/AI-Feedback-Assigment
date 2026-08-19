@@ -22,6 +22,8 @@ import {
   ArrowLeft,
   Search,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { triggerPlanCheckout } from "@/lib/payment";
 
 interface Feedback {
   id: string;
@@ -41,6 +43,8 @@ const statuses = ["New", "Under Review", "In Progress", "Resolved", "Closed"];
 
 export default function AllFeedbackPage() {
   const router = useRouter();
+  const { user, refreshUser } = useAuth();
+  const isLimitReached = (user?.usage?.feedbackCount || 0) >= (user?.usage?.feedbackLimit || 5);
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -81,6 +85,7 @@ export default function AllFeedbackPage() {
       await axiosInstance.delete(`/feedback/${deleteId}`);
       setDeleteId(null);
       loadFeedback();
+      await refreshUser();
     } catch (err) {
       console.error("Failed to delete feedback record:", err);
     }
@@ -109,9 +114,15 @@ export default function AllFeedbackPage() {
           <p className="text-sm text-muted-foreground">Manage and filter all customer feedback entries submitted to the workspace.</p>
         </div>
 
-        <Link href="/chat/create">
-          <Button className="font-semibold cursor-pointer">Submit Feedback</Button>
-        </Link>
+        {isLimitReached ? (
+          <Button disabled className="font-semibold bg-muted text-muted-foreground cursor-not-allowed opacity-55">
+            Submit Feedback (Limit Reached)
+          </Button>
+        ) : (
+          <Link href="/chat/create">
+            <Button className="font-semibold cursor-pointer">Submit Feedback</Button>
+          </Link>
+        )}
       </div>
 
       {/* Filter and Search Bar Card */}
@@ -199,13 +210,26 @@ export default function AllFeedbackPage() {
       <Card className="bg-card border-border/80 shadow-xs">
         <CardContent className="p-0">
           {loading ? (
-            <div className="flex items-center justify-center p-16">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+            <div className="p-5 space-y-5">
+              {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                <div key={i} className="flex items-center justify-between gap-4 py-1 border-b border-border/40 last:border-0">
+                  <div className="flex items-center gap-3 w-1/3">
+                    <div className="h-4 bg-muted shimmer rounded-sm w-full" />
+                  </div>
+                  <div className="space-y-1 w-1/4">
+                    <div className="h-3.5 bg-muted shimmer rounded-sm w-3/4" />
+                    <div className="h-2.5 bg-muted shimmer rounded-sm w-1/2" />
+                  </div>
+                  <div className="h-5 bg-muted shimmer rounded-full w-16" />
+                  <div className="h-5 bg-muted shimmer rounded-full w-12" />
+                  <div className="h-4 bg-muted shimmer rounded-sm w-20" />
+                </div>
+              ))}
             </div>
           ) : feedbacks.length > 0 ? (
             <>
               {/* Desktop Table View */}
-              <div className="hidden md:block">
+              <div className="hidden lg:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -254,7 +278,7 @@ export default function AllFeedbackPage() {
               </div>
 
               {/* Mobile Card List View */}
-              <div className="block md:hidden divide-y divide-border">
+              <div className="block lg:hidden divide-y divide-border">
                 {feedbacks.map((f) => (
                   <div key={f.id} className="p-4 space-y-3 hover:bg-muted/10 transition-colors">
                     <div className="flex items-start justify-between gap-2">

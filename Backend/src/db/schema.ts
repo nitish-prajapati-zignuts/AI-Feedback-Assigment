@@ -5,6 +5,8 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   email: text("email").default("").notNull(),
   passwordHash: text("password_hash").notNull(),
+  plan: text("plan").default("Free").notNull(), // "Free" | "Standard" | "Pro"
+  planExpiresAt: timestamp("plan_expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

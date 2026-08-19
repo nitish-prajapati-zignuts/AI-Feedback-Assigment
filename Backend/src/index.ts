@@ -2,9 +2,7 @@ import { env } from "./config";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import authRoutes from "./routes/auth";
-import feedbackRoutes from "./routes/feedback";
-import actionRoutes from "./routes/action";
+import { routingMiddleware } from "./middleware/router";
 
 const app = express();
 const port = env.PORT;
@@ -19,10 +17,8 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/feedback", feedbackRoutes);
-app.use("/api", actionRoutes);
+// Routing Middleware based on URL
+app.use(routingMiddleware);
 
 // Health check
 app.get("/health", (req, res) => {

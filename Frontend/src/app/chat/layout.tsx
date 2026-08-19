@@ -102,6 +102,36 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
           })}
         </nav>
 
+        {/* Plan Usage Progress Block */}
+        {user?.usage && (
+          <div className="mx-3 my-2 p-3 rounded-lg bg-sidebar-accent/30 border border-sidebar-border/30 text-xs">
+            <div className="flex justify-between items-center mb-1 text-[11px] font-semibold text-sidebar-foreground/80">
+              <span className="capitalize">{user.plan || "Free"} Plan</span>
+              <span>{user.usage.feedbackCount} / {user.usage.feedbackLimit >= 9999 ? "∞" : user.usage.feedbackLimit}</span>
+            </div>
+            <div className="w-full bg-sidebar-accent h-1.5 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${
+                  (user.usage.feedbackCount / user.usage.feedbackLimit) >= 0.9
+                    ? "bg-rose-500"
+                    : (user.usage.feedbackCount / user.usage.feedbackLimit) >= 0.7
+                    ? "bg-amber-500"
+                    : "bg-primary"
+                }`}
+                style={{
+                  width: `${Math.min(100, (user.usage.feedbackCount / (user.usage.feedbackLimit || 1)) * 100)}%`
+                }}
+              />
+            </div>
+            <div className="mt-1 text-[10px] text-sidebar-foreground/45 flex justify-between font-medium">
+              <span>Feedback Usage</span>
+              {user.plan !== "Pro" && (user.usage.feedbackCount >= user.usage.feedbackLimit) && (
+                <span className="text-rose-500 dark:text-rose-400 text-[9px] font-semibold animate-pulse">Limit Reached</span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="p-3 border-t border-sidebar-border">
           <div className="flex items-center justify-between">

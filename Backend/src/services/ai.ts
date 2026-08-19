@@ -3,6 +3,8 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import { env } from "../config";
+import { systemPrompt, buildFeedbackPrompt } from "../utils/aiPrompts";
+
 
 export const sentimentAnalysisSchema = z.object({
   overallTone: z
@@ -89,7 +91,6 @@ function getRotationPolicyApiKeys(): string[] {
   return Array.from(new Set(keys));
 }
 
-import { systemPrompt, buildFeedbackPrompt } from "../utils/aiPrompts";
 
 function toPlainText(text: string): string {
   if (!text) return "";

@@ -16,11 +16,18 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft } from "lucide-react";
 import { useUserStore } from "@/store/useUserStore";
+import { useAuth } from "@/context/AuthContext";
+import { triggerPlanCheckout } from "@/lib/payment";
 
 import RichTextEditor from "@/components/RichTextEditor";
 
 export default function CreateFeedbackPage() {
   const router = useRouter();
+  const { user, refreshUser } = useAuth();
+  const feedbackCount = user?.usage?.feedbackCount || 0;
+  const feedbackLimit = user?.usage?.feedbackLimit || 5;
+  const isLimitReached = feedbackCount >= feedbackLimit;
+
   const [formError, setFormError] = useState<string | null>(null);
   const [inputMethod, setInputMethod] = useState<"text" | "file">("text");
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
@@ -75,6 +82,7 @@ export default function CreateFeedbackPage() {
         customerName: username || data.customerName,
         customerEmail: email || data.customerEmail,
       });
+      await refreshUser();
       router.push("/chat");
     } catch (err: any) {
       setFormError(err.message || "Failed to create feedback");
@@ -95,6 +103,36 @@ export default function CreateFeedbackPage() {
           <CardTitle>Create Feedback Record</CardTitle>
         </CardHeader>
         <CardContent>
+          {isLimitReached && (
+            <div className="mb-6 p-4 rounded-xl border border-rose-500/30 bg-rose-500/5 text-rose-500 text-xs font-semibold leading-normal flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <p className="font-bold">⚠️ Plan Limit Exceeded</p>
+                <p className="font-medium text-muted-foreground">
+                  You have completed all {feedbackLimit} feedbacks allowed under your **{user?.plan || "Free"}** plan. Please upgrade to submit new feedback.
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="destructive"
+                  className="font-bold cursor-pointer h-7 text-[10px]"
+                  onClick={() => triggerPlanCheckout("Standard", () => window.location.reload())}
+                >
+                  Standard Plan
+                </Button>
+                <Button
+                  size="sm"
+                  type="button"
+                  className="font-bold cursor-pointer h-7 text-[10px] bg-primary text-primary-foreground border border-border"
+                  onClick={() => triggerPlanCheckout("Pro", () => window.location.reload())}
+                >
+                  Pro Plan
+                </Button>
+              </div>
+            </div>
+          )}
+
           {formError && (
             <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
               {formError}
@@ -205,10 +243,11 @@ export default function CreateFeedbackPage() {
                        type="file"
                        accept=".txt,.md"
                        onChange={handleFileChange}
-                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                       disabled={isLimitReached}
+                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                     />
                     <p className="font-medium text-sm">
-                      {uploadedFileName ? `📄 ${uploadedFileName}` : "Click to select or drag & drop"}
+                      {uploadedFileName ? `📄 ${uploadedFileName}` : isLimitReached ? "Upload disabled (Limit Reached)" : "Click to select or drag & drop"}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">Supports .txt and .md files</p>
                   </div>
@@ -229,7 +268,7 @@ export default function CreateFeedbackPage() {
               <Link href="/chat" className="inline-flex items-center justify-center h-8 px-3 rounded-lg border border-input bg-background text-sm font-medium hover:bg-muted transition-colors">
                 Cancel
               </Link>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting || isLimitReached}>
                 {isSubmitting ? "Saving..." : "Save Record"}
               </Button>
             </div>

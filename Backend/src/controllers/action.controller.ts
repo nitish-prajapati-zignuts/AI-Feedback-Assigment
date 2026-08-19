@@ -1,9 +1,8 @@
-import { Request, Response } from "express";
-import { db } from "../db/index";
-import { actionItems, feedback } from "../db/schema";
-import { eq, and } from "drizzle-orm";
+import { Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth";
 import { z } from "zod";
+import { BaseController } from "./base.controller";
+import { IActionItemsRepository, IFeedbackRepository } from "../db/repositories/interfaces";
 
 const actionItemSchema = z.object({
   description: z.string().min(1, "Description is required"),
@@ -13,319 +12,217 @@ const actionItemSchema = z.object({
   status: z.enum(["Open", "In Progress", "Blocked", "Completed"]).default("Open"),
 });
 
-// Get all action items across all user feedback records
-export const getAllActionItems = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const items = await db
-      .select({
-        id: actionItems.id,
-        feedbackId: actionItems.feedbackId,
-        feedbackTitle: feedback.title,
-        description: actionItems.description,
-        owner: actionItems.owner,
-        dueDate: actionItems.dueDate,
-        priority: actionItems.priority,
-        status: actionItems.status,
-        createdAt: actionItems.createdAt,
-        updatedAt: actionItems.updatedAt,
-      })
-      .from(actionItems)
-      .innerJoin(feedback, eq(actionItems.feedbackId, feedback.id))
-      .where(
-        and(
-          eq(feedback.userId, req.userId!),
-          eq(actionItems.isDeleted, false),
-          eq(feedback.isDeleted, false)
-        )
-      )
-      .orderBy(actionItems.createdAt);
+export class ActionController extends BaseController {
+  private actionItemsRepo: IActionItemsRepository;
+  private feedbackRepo: IFeedbackRepository;
 
-    res.json(items);
-  } catch (error) {
-    console.error("Get all action items error:", error);
-    res.status(500).json({ error: "Internal server error" });
+  constructor(actionItemsRepo: IActionItemsRepository, feedbackRepo: IFeedbackRepository) {
+    super();
+    this.actionItemsRepo = actionItemsRepo;
+    this.feedbackRepo = feedbackRepo;
   }
-};
 
-// Get all action items for a feedback record
-export const getActionItems = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { feedbackId } = req.params;
-
-    // Verify ownership of parent feedback first
-    const parentFeedback = await db.query.feedback.findFirst({
-      where: and(
-        eq(feedback.id, feedbackId),
-        eq(feedback.userId, req.userId!),
-        eq(feedback.isDeleted, false)
-      ),
-    });
-
-    if (!parentFeedback) {
-      res.status(404).json({ error: "Feedback record not found" });
-      return;
+  // Get all action items across all user feedback records
+  getAllActionItems = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const items = await this.actionItemsRepo.findAllUserActionItems(req.userId!);
+      this.ok(res, items);
+    } catch (error) {
+      this.serverError(res, error, "Get all action items error:");
     }
+  };
 
-    const items = await db.query.actionItems.findMany({
-      where: and(
-        eq(actionItems.feedbackId, feedbackId),
-        eq(actionItems.isDeleted, false)
-      ),
-      orderBy: (actionItems, { desc }) => [desc(actionItems.createdAt)],
-    });
+  // Get all action items for a feedback record
+  getActionItems = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { feedbackId } = req.params;
 
-    res.json(items);
-  } catch (error) {
-    console.error("Get action items error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+      // Verify ownership of parent feedback first
+      const parentFeedback = await this.feedbackRepo.findByIdAndUser(feedbackId, req.userId!);
 
-// Create a manually added action item
-export const createActionItem = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { feedbackId } = req.params;
-    const body = actionItemSchema.parse(req.body);
+      if (!parentFeedback) {
+        this.notFound(res, "Feedback record not found");
+        return;
+      }
 
-    const parentFeedback = await db.query.feedback.findFirst({
-      where: and(
-        eq(feedback.id, feedbackId),
-        eq(feedback.userId, req.userId!),
-        eq(feedback.isDeleted, false)
-      ),
-    });
-
-    if (!parentFeedback) {
-      res.status(404).json({ error: "Feedback record not found" });
-      return;
+      const items = await this.actionItemsRepo.findByFeedbackId(feedbackId);
+      this.ok(res, items);
+    } catch (error) {
+      this.serverError(res, error, "Get action items error:");
     }
+  };
 
-    const [newItem] = await db.insert(actionItems).values({
-      feedbackId,
-      description: body.description,
-      owner: body.owner,
-      dueDate: body.dueDate,
-      priority: body.priority,
-      status: body.status,
-    }).returning();
+  // Create a manually added action item
+  createActionItem = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { feedbackId } = req.params;
+      const body = actionItemSchema.parse(req.body);
 
-    res.status(201).json(newItem);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
-      return;
+      const parentFeedback = await this.feedbackRepo.findByIdAndUser(feedbackId, req.userId!);
+
+      if (!parentFeedback) {
+        this.notFound(res, "Feedback record not found");
+        return;
+      }
+
+      const newItem = await this.actionItemsRepo.create(feedbackId, body);
+      this.created(res, newItem);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        this.badRequest(res, error.errors[0].message);
+        return;
+      }
+      this.serverError(res, error, "Create action item error:");
     }
-    console.error("Create action item error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+  };
 
-// Update an action item
-export const updateActionItem = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const body = actionItemSchema.partial().parse(req.body);
+  // Update an action item
+  updateActionItem = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const body = actionItemSchema.partial().parse(req.body);
 
-    const existing = await db.query.actionItems.findFirst({
-      where: and(
-        eq(actionItems.id, id),
-        eq(actionItems.isDeleted, false)
-      ),
-    });
+      const existing = await this.actionItemsRepo.findById(id);
 
-    if (!existing) {
-      res.status(404).json({ error: "Action item not found" });
-      return;
+      if (!existing) {
+        this.notFound(res, "Action item not found");
+        return;
+      }
+
+      // Verify ownership of parent feedback
+      const parentFeedback = await this.feedbackRepo.findByIdAndUser(existing.feedbackId, req.userId!);
+
+      if (!parentFeedback) {
+        this.forbidden(res);
+        return;
+      }
+
+      const updated = await this.actionItemsRepo.update(id, body);
+      this.ok(res, updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        this.badRequest(res, error.errors[0].message);
+        return;
+      }
+      this.serverError(res, error, "Update action item error:");
     }
+  };
 
-    // Verify ownership of parent feedback
-    const parentFeedback = await db.query.feedback.findFirst({
-      where: and(
-        eq(feedback.id, existing.feedbackId),
-        eq(feedback.userId, req.userId!),
-        eq(feedback.isDeleted, false)
-      ),
-    });
+  // Delete an action item
+  deleteActionItem = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
 
-    if (!parentFeedback) {
-      res.status(403).json({ error: "Access denied" });
-      return;
+      const existing = await this.actionItemsRepo.findById(id);
+
+      if (!existing) {
+        this.notFound(res, "Action item not found");
+        return;
+      }
+
+      // Verify ownership
+      const parentFeedback = await this.feedbackRepo.findByIdAndUser(existing.feedbackId, req.userId!);
+
+      if (!parentFeedback) {
+        this.forbidden(res);
+        return;
+      }
+
+      // Soft delete action item
+      await this.actionItemsRepo.delete(id);
+      this.ok(res, { message: "Action item deleted successfully" });
+    } catch (error) {
+      this.serverError(res, error, "Delete action item error:");
     }
+  };
 
-    const [updated] = await db.update(actionItems)
-      .set({
-        ...body,
-        updatedAt: new Date(),
-      })
-      .where(eq(actionItems.id, id))
-      .returning();
+  // Approve an AI suggested action item
+  approveActionItemSuggestion = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { feedbackId } = req.params;
+      const { id, description, owner, priority, dueDate } = req.body;
 
-    res.json(updated);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
-      return;
+      if (!id) {
+        this.badRequest(res, "Suggestion ID is required");
+        return;
+      }
+
+      const parentFeedback = await this.feedbackRepo.findByIdAndUser(feedbackId, req.userId!);
+
+      if (!parentFeedback) {
+        this.notFound(res, "Feedback record not found");
+        return;
+      }
+
+      const suggestions = (parentFeedback.aiActionItems || []) as any[];
+      const targetIndex = suggestions.findIndex((item) => item.id === id);
+
+      if (targetIndex === -1) {
+        this.notFound(res, "Suggested action item not found");
+        return;
+      }
+
+      const targetItem = suggestions[targetIndex];
+
+      const finalDescription = description !== undefined ? description : targetItem.description;
+      const finalOwner = owner !== undefined ? owner : (targetItem.owner || "Unassigned");
+      const finalPriority = (priority === "High" || priority === "Medium" || priority === "Low") 
+        ? priority 
+        : ((targetItem.priority === "High" || targetItem.priority === "Medium" || targetItem.priority === "Low") ? targetItem.priority : "Medium");
+
+      let finalDueDate: Date;
+      if (dueDate) {
+        finalDueDate = new Date(dueDate);
+      } else {
+        finalDueDate = new Date();
+        finalDueDate.setDate(finalDueDate.getDate() + (targetItem.daysToComplete || 7));
+      }
+
+      // 1. Insert into actionItems table
+      const newItem = await this.actionItemsRepo.create(feedbackId, {
+        description: finalDescription,
+        owner: finalOwner,
+        dueDate: finalDueDate,
+        priority: finalPriority,
+        status: "Open",
+      });
+
+      // 2. Remove from feedback's aiActionItems list
+      const updatedSuggestions = suggestions.filter((item) => item.id !== id);
+      await this.feedbackRepo.updateAiActionItems(feedbackId, updatedSuggestions);
+
+      this.created(res, { message: "Action item approved and added", actionItem: newItem });
+    } catch (error) {
+      this.serverError(res, error, "Approve action item suggestion error:");
     }
-    console.error("Update action item error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
+  };
 
-// Delete an action item
-export const deleteActionItem = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
+  // Reject/Dismiss an AI suggested action item
+  rejectActionItemSuggestion = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { feedbackId } = req.params;
+      const { id } = req.body;
 
-    const existing = await db.query.actionItems.findFirst({
-      where: and(
-        eq(actionItems.id, id),
-        eq(actionItems.isDeleted, false)
-      ),
-    });
+      if (!id) {
+        this.badRequest(res, "Suggestion ID is required");
+        return;
+      }
 
-    if (!existing) {
-      res.status(404).json({ error: "Action item not found" });
-      return;
+      const parentFeedback = await this.feedbackRepo.findByIdAndUser(feedbackId, req.userId!);
+
+      if (!parentFeedback) {
+        this.notFound(res, "Feedback record not found");
+        return;
+      }
+
+      const suggestions = (parentFeedback.aiActionItems || []) as any[];
+      const updatedSuggestions = suggestions.filter((item) => item.id !== id);
+
+      await this.feedbackRepo.updateAiActionItems(feedbackId, updatedSuggestions);
+
+      this.ok(res, { message: "Action item suggestion dismissed" });
+    } catch (error) {
+      this.serverError(res, error, "Reject action item suggestion error:");
     }
-
-    // Verify ownership
-    const parentFeedback = await db.query.feedback.findFirst({
-      where: and(
-        eq(feedback.id, existing.feedbackId),
-        eq(feedback.userId, req.userId!),
-        eq(feedback.isDeleted, false)
-      ),
-    });
-
-    if (!parentFeedback) {
-      res.status(403).json({ error: "Access denied" });
-      return;
-    }
-
-    // Soft delete action item
-    await db.update(actionItems)
-      .set({ isDeleted: true, updatedAt: new Date() })
-      .where(eq(actionItems.id, id));
-
-    res.json({ message: "Action item deleted successfully" });
-  } catch (error) {
-    console.error("Delete action item error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// Approve an AI suggested action item
-export const approveActionItemSuggestion = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { feedbackId } = req.params;
-    const { id, description, owner, priority, dueDate } = req.body;
-
-    if (!id) {
-      res.status(400).json({ error: "Suggestion ID is required" });
-      return;
-    }
-
-    const parentFeedback = await db.query.feedback.findFirst({
-      where: and(
-        eq(feedback.id, feedbackId),
-        eq(feedback.userId, req.userId!),
-        eq(feedback.isDeleted, false)
-      ),
-    });
-
-    if (!parentFeedback) {
-      res.status(404).json({ error: "Feedback record not found" });
-      return;
-    }
-
-    const suggestions = (parentFeedback.aiActionItems || []) as any[];
-    const targetIndex = suggestions.findIndex((item) => item.id === id);
-
-    if (targetIndex === -1) {
-      res.status(404).json({ error: "Suggested action item not found" });
-      return;
-    }
-
-    const targetItem = suggestions[targetIndex];
-
-    const finalDescription = description !== undefined ? description : targetItem.description;
-    const finalOwner = owner !== undefined ? owner : (targetItem.owner || "Unassigned");
-    const finalPriority = (priority === "High" || priority === "Medium" || priority === "Low") 
-      ? priority 
-      : ((targetItem.priority === "High" || targetItem.priority === "Medium" || targetItem.priority === "Low") ? targetItem.priority : "Medium");
-
-    let finalDueDate: Date;
-    if (dueDate) {
-      finalDueDate = new Date(dueDate);
-    } else {
-      finalDueDate = new Date();
-      finalDueDate.setDate(finalDueDate.getDate() + (targetItem.daysToComplete || 7));
-    }
-
-    // 1. Insert into actionItems table
-    const [newItem] = await db.insert(actionItems).values({
-      feedbackId,
-      description: finalDescription,
-      owner: finalOwner,
-      dueDate: finalDueDate,
-      priority: finalPriority,
-      status: "Open",
-    }).returning();
-
-    // 2. Remove from feedback's aiActionItems list
-    const updatedSuggestions = suggestions.filter((item) => item.id !== id);
-    await db.update(feedback)
-      .set({
-        aiActionItems: updatedSuggestions,
-        updatedAt: new Date(),
-      })
-      .where(eq(feedback.id, feedbackId));
-
-    res.status(201).json({ message: "Action item approved and added", actionItem: newItem });
-  } catch (error) {
-    console.error("Approve action item suggestion error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// Reject/Dismiss an AI suggested action item
-export const rejectActionItemSuggestion = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { feedbackId } = req.params;
-    const { id } = req.body;
-
-    if (!id) {
-      res.status(400).json({ error: "Suggestion ID is required" });
-      return;
-    }
-
-    const parentFeedback = await db.query.feedback.findFirst({
-      where: and(
-        eq(feedback.id, feedbackId),
-        eq(feedback.userId, req.userId!),
-        eq(feedback.isDeleted, false)
-      ),
-    });
-
-    if (!parentFeedback) {
-      res.status(404).json({ error: "Feedback record not found" });
-      return;
-    }
-
-    const suggestions = (parentFeedback.aiActionItems || []) as any[];
-    const updatedSuggestions = suggestions.filter((item) => item.id !== id);
-
-    await db.update(feedback)
-      .set({
-        aiActionItems: updatedSuggestions,
-        updatedAt: new Date(),
-      })
-      .where(eq(feedback.id, feedbackId));
-
-    res.json({ message: "Action item suggestion dismissed" });
-  } catch (error) {
-    console.error("Reject action item suggestion error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
+  };
+}

@@ -4,6 +4,8 @@ import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import GlobalProgressBar from "@/components/GlobalProgressBar";
+import { Toaster } from "sonner";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -31,6 +33,8 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
           <TooltipProvider>
             <AuthProvider>
+              <GlobalProgressBar />
+              <Toaster richColors position="top-right" closeButton theme="dark" />
               {children}
             </AuthProvider>
           </TooltipProvider>
