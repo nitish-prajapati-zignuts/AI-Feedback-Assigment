@@ -22,7 +22,7 @@ export default function ActionsTableView({ actions, onEdit, onDelete }: ActionsT
     <Card className="flex flex-col flex-1 min-h-0 overflow-hidden bg-card">
       <CardContent className="flex-1 min-h-0 overflow-auto p-0 no-scrollbar">
         {/* Desktop Table View */}
-        <div className="hidden md:block">
+        <div className="hidden lg:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -89,8 +89,8 @@ export default function ActionsTableView({ actions, onEdit, onDelete }: ActionsT
           </Table>
         </div>
 
-        {/* Mobile Cards List */}
-        <div className="block md:hidden divide-y divide-border overflow-y-auto h-full">
+        {/* Mobile/Tablet Cards List */}
+        <div className="block lg:hidden divide-y divide-border overflow-y-auto h-full">
           {actions.map((item) => (
             <div key={item.id} className="p-4 space-y-3 hover:bg-muted/10 transition-colors">
               <div className="flex items-start justify-between gap-2">

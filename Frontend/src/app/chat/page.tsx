@@ -629,7 +629,7 @@ export default function DashboardPage() {
                 ) : filteredFeedbacks.length > 0 ? (
                   <>
                     {/* Desktop Table View */}
-                    <div className="hidden md:block">
+                    <div className="hidden lg:block">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -699,8 +699,8 @@ export default function DashboardPage() {
                       </Table>
                     </div>
 
-                    {/* Mobile Cards List (Visible on mobile only) */}
-                    <div className="block md:hidden divide-y divide-border overflow-y-auto max-h-[600px] no-scrollbar">
+                    {/* Mobile/Tablet Cards List */}
+                    <div className="block lg:hidden divide-y divide-border overflow-y-auto max-h-[600px] no-scrollbar">
                       {filteredFeedbacks.slice(0, 5).map((f) => (
                         <div key={f.id} className="p-4 space-y-3 hover:bg-muted/10 transition-colors">
                           <div className="flex items-start justify-between gap-2">

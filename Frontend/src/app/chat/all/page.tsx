@@ -205,7 +205,7 @@ export default function AllFeedbackPage() {
           ) : feedbacks.length > 0 ? (
             <>
               {/* Desktop Table View */}
-              <div className="hidden md:block">
+              <div className="hidden lg:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -253,8 +253,8 @@ export default function AllFeedbackPage() {
                 </Table>
               </div>
 
-              {/* Mobile Card List View */}
-              <div className="block md:hidden divide-y divide-border">
+              {/* Mobile/Tablet Card List View */}
+              <div className="block lg:hidden divide-y divide-border">
                 {feedbacks.map((f) => (
                   <div key={f.id} className="p-4 space-y-3 hover:bg-muted/10 transition-colors">
                     <div className="flex items-start justify-between gap-2">
