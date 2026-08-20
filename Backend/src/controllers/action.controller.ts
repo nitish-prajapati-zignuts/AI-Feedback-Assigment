@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AuthenticatedRequest } from "../middleware/auth";
+import { WorkspaceRequest } from "../middleware/rbac";
 import { z } from "zod";
 import { BaseController } from "./base.controller";
 import { IActionItemsRepository, IFeedbackRepository } from "../db/repositories/interfaces";
@@ -22,10 +22,12 @@ export class ActionController extends BaseController {
     this.feedbackRepo = feedbackRepo;
   }
 
-  // Get all action items across all user feedback records
-  getAllActionItems = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  // Get all action items across workspace feedback records
+  getAllActionItems = async (req: WorkspaceRequest, res: Response): Promise<void> => {
     try {
-      const items = await this.actionItemsRepo.findAllUserActionItems(req.userId!);
+      const items = req.workspaceId
+        ? await this.actionItemsRepo.findAllWorkspaceActionItems(req.workspaceId)
+        : await this.actionItemsRepo.findAllUserActionItems(req.userId!);
       this.ok(res, items);
     } catch (error) {
       this.serverError(res, error, "Get all action items error:");
@@ -33,12 +35,14 @@ export class ActionController extends BaseController {
   };
 
   // Get all action items for a feedback record
-  getActionItems = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  getActionItems = async (req: WorkspaceRequest, res: Response): Promise<void> => {
     try {
       const { feedbackId } = req.params;
 
       // Verify ownership of parent feedback first
-      const parentFeedback = await this.feedbackRepo.findByIdAndUser(feedbackId, req.userId!);
+      const parentFeedback = req.workspaceId
+        ? await this.feedbackRepo.findByIdAndWorkspace(feedbackId, req.workspaceId)
+        : await this.feedbackRepo.findByIdAndUser(feedbackId, req.userId!);
 
       if (!parentFeedback) {
         this.notFound(res, "Feedback record not found");
@@ -53,12 +57,14 @@ export class ActionController extends BaseController {
   };
 
   // Create a manually added action item
-  createActionItem = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  createActionItem = async (req: WorkspaceRequest, res: Response): Promise<void> => {
     try {
       const { feedbackId } = req.params;
       const body = actionItemSchema.parse(req.body);
 
-      const parentFeedback = await this.feedbackRepo.findByIdAndUser(feedbackId, req.userId!);
+      const parentFeedback = req.workspaceId
+        ? await this.feedbackRepo.findByIdAndWorkspace(feedbackId, req.workspaceId)
+        : await this.feedbackRepo.findByIdAndUser(feedbackId, req.userId!);
 
       if (!parentFeedback) {
         this.notFound(res, "Feedback record not found");
@@ -77,7 +83,7 @@ export class ActionController extends BaseController {
   };
 
   // Update an action item
-  updateActionItem = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  updateActionItem = async (req: WorkspaceRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
       const body = actionItemSchema.partial().parse(req.body);
@@ -90,7 +96,9 @@ export class ActionController extends BaseController {
       }
 
       // Verify ownership of parent feedback
-      const parentFeedback = await this.feedbackRepo.findByIdAndUser(existing.feedbackId, req.userId!);
+      const parentFeedback = req.workspaceId
+        ? await this.feedbackRepo.findByIdAndWorkspace(existing.feedbackId, req.workspaceId)
+        : await this.feedbackRepo.findByIdAndUser(existing.feedbackId, req.userId!);
 
       if (!parentFeedback) {
         this.forbidden(res);
@@ -109,7 +117,7 @@ export class ActionController extends BaseController {
   };
 
   // Delete an action item
-  deleteActionItem = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  deleteActionItem = async (req: WorkspaceRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
 
@@ -121,7 +129,9 @@ export class ActionController extends BaseController {
       }
 
       // Verify ownership
-      const parentFeedback = await this.feedbackRepo.findByIdAndUser(existing.feedbackId, req.userId!);
+      const parentFeedback = req.workspaceId
+        ? await this.feedbackRepo.findByIdAndWorkspace(existing.feedbackId, req.workspaceId)
+        : await this.feedbackRepo.findByIdAndUser(existing.feedbackId, req.userId!);
 
       if (!parentFeedback) {
         this.forbidden(res);
@@ -137,7 +147,7 @@ export class ActionController extends BaseController {
   };
 
   // Approve an AI suggested action item
-  approveActionItemSuggestion = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  approveActionItemSuggestion = async (req: WorkspaceRequest, res: Response): Promise<void> => {
     try {
       const { feedbackId } = req.params;
       const { id, description, owner, priority, dueDate } = req.body;
@@ -147,7 +157,9 @@ export class ActionController extends BaseController {
         return;
       }
 
-      const parentFeedback = await this.feedbackRepo.findByIdAndUser(feedbackId, req.userId!);
+      const parentFeedback = req.workspaceId
+        ? await this.feedbackRepo.findByIdAndWorkspace(feedbackId, req.workspaceId)
+        : await this.feedbackRepo.findByIdAndUser(feedbackId, req.userId!);
 
       if (!parentFeedback) {
         this.notFound(res, "Feedback record not found");
@@ -198,7 +210,7 @@ export class ActionController extends BaseController {
   };
 
   // Reject/Dismiss an AI suggested action item
-  rejectActionItemSuggestion = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  rejectActionItemSuggestion = async (req: WorkspaceRequest, res: Response): Promise<void> => {
     try {
       const { feedbackId } = req.params;
       const { id } = req.body;
@@ -208,7 +220,9 @@ export class ActionController extends BaseController {
         return;
       }
 
-      const parentFeedback = await this.feedbackRepo.findByIdAndUser(feedbackId, req.userId!);
+      const parentFeedback = req.workspaceId
+        ? await this.feedbackRepo.findByIdAndWorkspace(feedbackId, req.workspaceId)
+        : await this.feedbackRepo.findByIdAndUser(feedbackId, req.userId!);
 
       if (!parentFeedback) {
         this.notFound(res, "Feedback record not found");

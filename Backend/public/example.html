@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acme Inc. - Customer Portal Demo</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #09090b;
+      color: #f4f4f5;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    header {
+      background: #18181b;
+      border-b: 1px solid #27272a;
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      color: #e11d48;
+    }
+    main {
+      flex: 1;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    .card {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .card h2 {
+      margin-top: 0;
+      font-size: 16px;
+      color: #ffffff;
+    }
+    .card p {
+      color: #a1a1aa;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    footer {
+      text-align: center;
+      padding: 20px;
+      color: #71717a;
+      font-size: 12px;
+      border-t: 1px solid #27272a;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Acme Inc. Demo Store</h1>
+    <span style="font-size: 13px; color: #a1a1aa;">External Website Integration Test</span>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>Welcome to Acme Inc. Portal</h2>
+      <p>
+        This external webpage demonstrates the <strong>Feedback Hub Embedded Widget SDK</strong> in action.
+        Notice the floating <strong>💬 Feedback</strong> button at the bottom-right corner of this page.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>How to Test</h2>
+      <p>
+        1. Click the floating <strong>💬 Feedback</strong> button at the bottom right.<br />
+        2. Fill out the subject, name, email, category, and feedback message.<br />
+        3. Submit the form.<br />
+        4. Open your <strong>AI Feedback & Insights Tracker Dashboard</strong> to see your submitted feedback automatically classified by AI!
+      </p>
+    </div>
+  </main>
+
+  <footer>
+    &copy; 2026 Acme Inc. Powered by Feedback Hub AI SDK
+  </footer>
+
+  <!-- EMBEDDED FEEDBACK SDK WIDGET -->
+  <script
+    src="http://localhost:4000/widget.js"
+    data-api-key="fb_live_s7i56kqihjfpdnago3n2c"
+    data-api-host="http://localhost:4000"
+    async>
+  </script>
+
+</body>
+</html>

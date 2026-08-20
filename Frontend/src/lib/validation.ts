@@ -42,6 +42,7 @@ export const feedbackSchema = z.object({
     "Other"
   ]),
   status: z.enum(["New", "Under Review", "In Progress", "Resolved", "Closed"]),
+  tags: z.array(z.string()).optional(),
 });
 
 export const actionItemSchema = z.object({

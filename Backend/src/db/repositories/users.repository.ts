@@ -17,6 +17,13 @@ export class UsersRepository extends BaseRepository<typeof users> implements IUs
   }
 
   /**
+   * Finds a user by their email.
+   */
+  async findByEmail(email: string): Promise<User | null> {
+    return this.findFirst(eq(users.email, email));
+  }
+
+  /**
    * Registers a new user.
    */
   async create(username: string, email: string, passwordHash: string): Promise<User> {

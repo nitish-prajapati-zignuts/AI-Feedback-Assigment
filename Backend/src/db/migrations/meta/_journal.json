@@ -99,6 +99,27 @@
       "when": 1787127077692,
       "tag": "0013_yellow_jackpot",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787211694546,
+      "tag": "0014_huge_sinister_six",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1787212525131,
+      "tag": "0015_glorious_cerebro",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1787213615399,
+      "tag": "0016_sleepy_ikaris",
+      "breakpoints": true
     }
   ]
 }

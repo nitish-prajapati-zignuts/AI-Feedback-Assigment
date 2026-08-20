@@ -20,6 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import { triggerPlanCheckout } from "@/lib/payment";
 
 import RichTextEditor from "@/components/RichTextEditor";
+import { TagInput } from "@/components/ui/TagInput";
 
 export default function CreateFeedbackPage() {
   const router = useRouter();
@@ -196,6 +197,15 @@ export default function CreateFeedbackPage() {
             </div>
 
             <div className="space-y-2">
+              <Label>Tags / Labels</Label>
+              <TagInput
+                tags={watch("tags") || []}
+                onChange={(newTags) => setValue("tags", newTags)}
+                placeholder="Add tags (e.g. ui-bug, v2.0-release)..."
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label>Feedback Date</Label>
               <Input type="date" {...register("feedbackDate")} />
               {errors.feedbackDate && <p className="text-xs text-destructive">{errors.feedbackDate.message}</p>}
@@ -229,7 +239,7 @@ export default function CreateFeedbackPage() {
                 <Label>Content</Label>
                 <RichTextEditor
                   value={watch("content")}
-                  onChange={(val) => setValue("content", val)}
+                  onChange={(val: string) => setValue("content", val)}
                   height={280}
                 />
                 {errors.content && <p className="text-xs text-destructive">{errors.content.message}</p>}
@@ -256,7 +266,7 @@ export default function CreateFeedbackPage() {
                   <Label>Parsed Content Preview</Label>
                   <RichTextEditor
                     value={watch("content")}
-                    onChange={(val) => setValue("content", val)}
+                    onChange={(val: string) => setValue("content", val)}
                     height={250}
                   />
                   {errors.content && <p className="text-xs text-destructive">{errors.content.message}</p>}

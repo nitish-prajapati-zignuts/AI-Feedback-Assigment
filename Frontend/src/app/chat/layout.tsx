@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -17,13 +18,17 @@ import {
   MessageSquareText,
   Menu,
   X,
+  TrendingUp,
+  Users,
 } from "lucide-react";
 
 const navItems = [
   { href: "/chat", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/chat?tab=trends", label: "Trends Analytics", icon: TrendingUp },
   { href: "/chat/all", label: "Feedbacks", icon: MessageSquareText },
   { href: "/chat/actions", label: "Actions Tracker", icon: ClipboardList },
   { href: "/chat/create", label: "Submit Feedback", icon: Plus },
+  { href: "/chat/settings", label: "Team & Settings", icon: Users },
 ];
 
 export default function ChatLayout({ children }: { children: React.ReactNode }) {
@@ -61,22 +66,24 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
       <aside className={`fixed inset-y-0 left-0 z-50 w-60 border-r border-border bg-sidebar flex flex-col h-full shrink-0 transition-transform duration-300 md:relative md:translate-x-0 ${
         isSidebarOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
-        {/* Logo & Close Button (Close button only on mobile) */}
-        <div className="h-14 px-5 flex items-center justify-between border-b border-sidebar-border gap-2.5">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <MessageSquareText className="h-4 w-4" />
+        {/* Logo */}
+        <div className="p-3 border-b border-sidebar-border">
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <MessageSquareText className="h-4 w-4" />
+              </div>
+              <span className="font-semibold text-xs text-sidebar-foreground tracking-tight">Feedback Hub</span>
             </div>
-            <span className="font-semibold text-sm text-sidebar-foreground tracking-tight">Feedback Hub</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 md:hidden text-sidebar-foreground/60 hover:text-foreground"
+              onClick={() => setIsSidebarOpen(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 md:hidden text-sidebar-foreground/60 hover:text-foreground"
-            onClick={() => setIsSidebarOpen(false)}
-          >
-            <X className="h-4 w-4" />
-          </Button>
         </div>
 
         {/* Navigation */}
@@ -175,11 +182,19 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
               {pathname === "/chat/create" && "Submit Feedback"}
               {pathname === "/chat/actions" && "Actions Tracker"}
               {pathname === "/chat/all" && "Feedbacks"}
-              {pathname.match(/^\/chat\/[^/]+$/) && !pathname.includes("create") && !pathname.includes("actions") && !pathname.includes("all") && "Feedback Details"}
+              {pathname === "/chat/settings" && "Team & Settings"}
+              {pathname.match(/^\/chat\/[^/]+$/) && !pathname.includes("create") && !pathname.includes("actions") && !pathname.includes("all") && !pathname.includes("settings") && "Feedback Details"}
               {pathname.match(/\/edit$/) && "Edit Feedback"}
             </h1>
+            <div className="h-4 w-px bg-border hidden sm:block" />
+            <div className="hidden sm:block">
+              <WorkspaceSwitcher />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div className="sm:hidden">
+              <WorkspaceSwitcher />
+            </div>
             {mounted && (
               <Tooltip>
                 <TooltipTrigger

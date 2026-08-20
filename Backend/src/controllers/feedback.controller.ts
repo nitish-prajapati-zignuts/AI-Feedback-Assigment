@@ -1,10 +1,13 @@
 import { Response } from "express";
-import { AuthenticatedRequest } from "../middleware/auth";
+import { WorkspaceRequest } from "../middleware/rbac";
 import { z } from "zod";
 import { analyzeFeedback } from "../services/ai";
 import { BaseController } from "./base.controller";
 import { IFeedbackRepository } from "../db/repositories/interfaces";
 import { container } from "../di";
+import { generateText } from "ai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { env } from "../config";
 
 function cleanContent(text: string): string {
   if (!text) return "";
@@ -69,6 +72,7 @@ const feedbackSchema = z.object({
     "Other"
   ]),
   status: z.enum(["New", "Under Review", "In Progress", "Resolved", "Closed"]).default("New"),
+  tags: z.array(z.string()).optional().default([]),
   aiSummary: z.object({
     mainConcern: z.string().optional().default(""),
     importantDetails: z.string().optional().default(""),
@@ -87,7 +91,7 @@ export class FeedbackController extends BaseController {
   }
 
   // Create Feedback
-  createFeedback = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  createFeedback = async (req: WorkspaceRequest, res: Response): Promise<void> => {
     try {
       const body = feedbackSchema.parse(req.body);
 
@@ -99,7 +103,10 @@ export class FeedbackController extends BaseController {
         return;
       }
 
-      const activeFeedbacks = await this.feedbackRepo.findManyByUser(req.userId!);
+      const activeFeedbacks = req.workspaceId
+        ? await this.feedbackRepo.findManyByWorkspace(req.workspaceId)
+        : await this.feedbackRepo.findManyByUser(req.userId!);
+
       let limit = 5;
       if (user.plan === "Standard") {
         limit = 25;
@@ -127,6 +134,7 @@ export class FeedbackController extends BaseController {
 
       const newRecord = await this.feedbackRepo.create(
         req.userId!,
+        req.workspaceId!,
         { ...body, content: sanitizedContent },
         aiResult,
         suggestedActions
@@ -143,18 +151,26 @@ export class FeedbackController extends BaseController {
   };
 
   // Get Feedback List (with search & filters)
-  getFeedbackList = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  getFeedbackList = async (req: WorkspaceRequest, res: Response): Promise<void> => {
     try {
       const { search, category, source, status, limit } = req.query;
 
       const parsedLimit = limit ? parseInt(limit as string) : undefined;
-      const records = await this.feedbackRepo.findManyByUser(req.userId!, {
-        search: search as string,
-        category: category as string,
-        source: source as string,
-        status: status as string,
-        limit: parsedLimit && !isNaN(parsedLimit) ? parsedLimit : undefined,
-      });
+      const records = req.workspaceId
+        ? await this.feedbackRepo.findManyByWorkspace(req.workspaceId, {
+            search: search as string,
+            category: category as string,
+            source: source as string,
+            status: status as string,
+            limit: parsedLimit && !isNaN(parsedLimit) ? parsedLimit : undefined,
+          })
+        : await this.feedbackRepo.findManyByUser(req.userId!, {
+            search: search as string,
+            category: category as string,
+            source: source as string,
+            status: status as string,
+            limit: parsedLimit && !isNaN(parsedLimit) ? parsedLimit : undefined,
+          });
 
       this.ok(res, records);
     } catch (error) {
@@ -163,11 +179,13 @@ export class FeedbackController extends BaseController {
   };
 
   // Get Feedback Details
-  getFeedbackDetails = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  getFeedbackDetails = async (req: WorkspaceRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
 
-      const record = await this.feedbackRepo.findByIdAndUser(id, req.userId!);
+      const record = req.workspaceId
+        ? await this.feedbackRepo.findByIdAndWorkspace(id, req.workspaceId)
+        : await this.feedbackRepo.findByIdAndUser(id, req.userId!);
 
       if (!record) {
         this.notFound(res, "Feedback record not found");
@@ -181,12 +199,14 @@ export class FeedbackController extends BaseController {
   };
 
   // Update Feedback
-  updateFeedback = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  updateFeedback = async (req: WorkspaceRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
       const body = feedbackSchema.partial().parse(req.body);
 
-      const existing = await this.feedbackRepo.findByIdAndUser(id, req.userId!);
+      const existing = req.workspaceId
+        ? await this.feedbackRepo.findByIdAndWorkspace(id, req.workspaceId)
+        : await this.feedbackRepo.findByIdAndUser(id, req.userId!);
 
       if (!existing) {
         this.notFound(res, "Feedback record not found");
@@ -232,16 +252,69 @@ export class FeedbackController extends BaseController {
   };
 
   // Delete Feedback
-  deleteFeedback = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  deleteFeedback = async (req: WorkspaceRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
 
-      // soft deletes and cascades logic is entirely encapsulated in repository
+      const record = req.workspaceId
+        ? await this.feedbackRepo.findByIdAndWorkspace(id, req.workspaceId)
+        : await this.feedbackRepo.findByIdAndUser(id, req.userId!);
+
+      if (!record) {
+        this.notFound(res, "Feedback record not found");
+        return;
+      }
+
       await this.feedbackRepo.delete(id, req.userId!);
 
       this.ok(res, { message: "Feedback record deleted successfully" });
     } catch (error) {
       this.serverError(res, error, "Delete feedback error:");
+    }
+  };
+
+  // POST /api/feedback/:id/draft-reply - AI Customer Reply Draft Generator
+  generateReplyDraft = async (req: WorkspaceRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { tone = "empathetic" } = req.body;
+
+      const record = req.workspaceId
+        ? await this.feedbackRepo.findByIdAndWorkspace(id, req.workspaceId)
+        : await this.feedbackRepo.findByIdAndUser(id, req.userId!);
+
+      if (!record) {
+        this.notFound(res, "Feedback record not found");
+        return;
+      }
+
+      const googleKey = env.GOOGLE_GENERATIVE_AI_API_KEY || env.GEMINI_FALL_BACK_KEY;
+      if (!googleKey) {
+        this.badRequest(res, "AI API Key is not configured");
+        return;
+      }
+
+      const googleProvider = createGoogleGenerativeAI({ apiKey: googleKey });
+      const prompt = `Draft a personalized customer support reply to this feedback.
+Customer Name: ${record.customerName}
+Customer Email: ${record.customerEmail}
+Feedback Title: ${record.title}
+Category: ${record.category}
+Customer Message: "${record.content}"
+AI Sentiment Analysis: ${JSON.stringify(record.aiSentimentAnalysis || {})}
+
+Tone requested: ${tone} (e.g. empathetic, formal, or casual).
+Write a professional, polite, and helpful response address to ${record.customerName}. Provide a clear explanation of how we are addressing their feedback. Sign off warmly from "The Product & Support Team".`;
+
+      const { text } = await generateText({
+        model: googleProvider("gemini-3.5-flash-lite"),
+        prompt,
+        system: "You are an expert customer success & product support representative writing empathetic, clear, and action-oriented responses.",
+      });
+
+      this.ok(res, { replyDraft: text, tone });
+    } catch (error) {
+      this.serverError(res, error, "Failed to generate reply draft:");
     }
   };
 }

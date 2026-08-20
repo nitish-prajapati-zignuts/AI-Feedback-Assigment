@@ -10,7 +10,36 @@ export class ActionItemsRepository extends BaseRepository<typeof actionItems> im
   }
 
   /**
-   * Retrieves all action items for a user, joined with feedback details.
+   * Retrieves all action items for a workspace, joined with feedback details.
+   */
+  async findAllWorkspaceActionItems(workspaceId: string): Promise<any[]> {
+    return this.client
+      .select({
+        id: actionItems.id,
+        feedbackId: actionItems.feedbackId,
+        feedbackTitle: feedback.title,
+        description: actionItems.description,
+        owner: actionItems.owner,
+        dueDate: actionItems.dueDate,
+        priority: actionItems.priority,
+        status: actionItems.status,
+        createdAt: actionItems.createdAt,
+        updatedAt: actionItems.updatedAt,
+      })
+      .from(actionItems)
+      .innerJoin(feedback, eq(actionItems.feedbackId, feedback.id))
+      .where(
+        and(
+          eq(feedback.workspaceId, workspaceId),
+          eq(actionItems.isDeleted, false),
+          eq(feedback.isDeleted, false)
+        )
+      )
+      .orderBy(actionItems.createdAt);
+  }
+
+  /**
+   * Retrieves all action items for a user, joined with feedback details (fallback).
    */
   async findAllUserActionItems(userId: string): Promise<any[]> {
     return this.client

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { axiosInstance } from "@/lib/axios";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { triggerPlanCheckout } from "@/lib/payment";
+import { TrendsAnalyticsSection } from "@/components/analytics/TrendsAnalyticsSection";
 import {
   ResponsiveContainer,
   BarChart,
@@ -61,6 +62,7 @@ interface Feedback {
   source: string;
   category: string;
   status: string;
+  tags?: string[];
   aiSummary?: {
     mainConcern?: string;
     importantDetails?: string;
@@ -95,7 +97,7 @@ const sentiments = ["Very Positive", "Positive", "Neutral", "Negative", "Frustra
 const sources = ["Customer Support", "Survey", "Product Review", "Sales Team", "Direct Feedback", "Internal Team", "Other"];
 const statuses = ["New", "Under Review", "In Progress", "Resolved", "Closed"];
 
-const SENTIMENT_COLORS = {
+const SENTIMENT_COLORS: Record<string, string> = {
   "Very Positive": "#10b981",
   "Positive": "#34d399",
   "Neutral": "#9ca3af",
@@ -118,6 +120,8 @@ const STATUS_COLORS = {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
   const { user, refreshUser } = useAuth();
   const feedbackCount = user?.usage?.feedbackCount || 0;
   const feedbackLimit = user?.usage?.feedbackLimit || 5;
@@ -125,7 +129,13 @@ export default function DashboardPage() {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [actions, setActions] = useState<GlobalActionItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(tabFromUrl || "overview");
+
+  useEffect(() => {
+    if (tabFromUrl) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   // Filter States
   const [search, setSearch] = useState("");
@@ -291,6 +301,12 @@ export default function DashboardPage() {
   };
   const timelineData = getTimelineData();
 
+  // Recharts: Priority Heatmap Breakdown
+  const priorityHeatmapData = ["Low", "Medium", "High", "Critical"].map((p) => ({
+    name: p,
+    count: filteredFeedbacks.filter((f) => f.aiClassification?.priority === p).length,
+  }));
+
   // Recharts: Action Statuses
   const actionStatusChartData = ["Open", "In Progress", "Blocked", "Completed"].map((st) => ({
     name: st,
@@ -451,10 +467,111 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* Visual Analytics Charts Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 1. Sentiment Distribution Donut Chart */}
+        <Card className="p-4 flex flex-col justify-between">
+          <CardHeader className="p-0 pb-2">
+            <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              Sentiment Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={sentimentChartData.length > 0 ? sentimentChartData : [{ name: "No Data", value: 1 }]}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={35}
+                  outerRadius={55}
+                  paddingAngle={3}
+                  dataKey="value"
+                >
+                  {sentimentChartData.map((entry) => (
+                    <Cell key={entry.name} fill={SENTIMENT_COLORS[entry.name] || "#71717a"} />
+                  ))}
+                </Pie>
+                <ChartTooltip
+                  contentStyle={{ backgroundColor: "#18181b", borderColor: "#27272a", borderRadius: "8px", fontSize: "11px" }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* 2. Category Breakdown Bar Chart */}
+        <Card className="p-4 flex flex-col justify-between">
+          <CardHeader className="p-0 pb-2">
+            <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              Category Breakdown
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={categoryChartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                <XAxis dataKey="name" stroke="#71717a" fontSize={9} tickLine={false} />
+                <YAxis stroke="#71717a" fontSize={9} tickLine={false} allowDecimals={false} />
+                <ChartTooltip
+                  contentStyle={{ backgroundColor: "#18181b", borderColor: "#27272a", borderRadius: "8px", fontSize: "11px" }}
+                />
+                <Bar dataKey="count" fill="#e11d48" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* 3. Priority Heatmap */}
+        <Card className="p-4 flex flex-col justify-between">
+          <CardHeader className="p-0 pb-2">
+            <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              Priority Heatmap
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={priorityHeatmapData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                <XAxis dataKey="name" stroke="#71717a" fontSize={9} tickLine={false} />
+                <YAxis stroke="#71717a" fontSize={9} tickLine={false} allowDecimals={false} />
+                <ChartTooltip
+                  contentStyle={{ backgroundColor: "#18181b", borderColor: "#27272a", borderRadius: "8px", fontSize: "11px" }}
+                />
+                <Bar dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* 4. Feedback Volume Over Time Line Chart */}
+        <Card className="p-4 flex flex-col justify-between">
+          <CardHeader className="p-0 pb-2">
+            <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              Volume Over Time
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={timelineData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                <XAxis dataKey="date" stroke="#71717a" fontSize={9} tickLine={false} />
+                <YAxis stroke="#71717a" fontSize={9} tickLine={false} allowDecimals={false} />
+                <ChartTooltip
+                  contentStyle={{ backgroundColor: "#18181b", borderColor: "#27272a", borderRadius: "8px", fontSize: "11px" }}
+                />
+                <Line type="monotone" dataKey="Feedback Volume" stroke="#10b981" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-border pb-3 shrink-0">
         {[
           { id: "overview", label: "Overview" },
+          { id: "trends", label: "📈 Trends & Velocity Analytics" },
           { id: "sentiment", label: "Sentiment & Timeline" },
           { id: "categories", label: "Categories & Sources" },
           { id: "actions", label: "Action Performance" },
@@ -475,6 +592,8 @@ export default function DashboardPage() {
       </div>
 
       {/* Tab Contents */}
+      {activeTab === "trends" && <TrendsAnalyticsSection />}
+
       {activeTab === "overview" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Feedback List */}
@@ -714,6 +833,15 @@ export default function DashboardPage() {
                               <TableCell>
                                 <div className="font-medium text-sm text-foreground">{f.customerName}</div>
                                 <div className="text-xs text-muted-foreground truncate max-w-[150px]">{f.customerEmail}</div>
+                                {f.tags && f.tags.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {f.tags.map((tag) => (
+                                      <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono font-medium">
+                                        #{tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                               </TableCell>
                               <TableCell><Badge variant="outline">{f.category}</Badge></TableCell>
                               <TableCell>

@@ -34,6 +34,7 @@ interface Feedback {
   source: string;
   category: string;
   status: string;
+  tags?: string[];
   aiClassification?: { sentiment: string; priority: string; productArea?: string; feedbackType?: string };
 }
 
@@ -248,6 +249,15 @@ export default function AllFeedbackPage() {
                         <TableCell>
                           <div className="font-medium text-sm">{f.customerName}</div>
                           <div className="text-xs text-muted-foreground">{f.customerEmail}</div>
+                          {f.tags && f.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {f.tags.map((tag: string) => (
+                                <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono font-medium">
+                                  #{tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell><Badge variant="outline">{f.category}</Badge></TableCell>
                         <TableCell><Badge variant={statusBadgeVariant(f.status)}>{f.status}</Badge></TableCell>

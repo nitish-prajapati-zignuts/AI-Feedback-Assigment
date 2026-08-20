@@ -180,4 +180,56 @@ export class AuthController extends BaseController {
       this.serverError(res, error, "Failed to update plan:");
     }
   };
+
+  updateProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { username, email, currentPassword, newPassword } = req.body;
+      const user = await this.usersRepo.findById(req.userId!);
+      if (!user) {
+        this.notFound(res, "User not found");
+        return;
+      }
+
+      const updates: any = {};
+      if (username && username.trim() !== user.username) {
+        updates.username = username.trim();
+      }
+      if (email && email.trim() !== user.email) {
+        updates.email = email.trim();
+      }
+
+      if (newPassword) {
+        if (!currentPassword) {
+          this.badRequest(res, "Current password is required to set a new password");
+          return;
+        }
+        const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!isMatch) {
+          this.badRequest(res, "Incorrect current password");
+          return;
+        }
+        const salt = await bcrypt.genSalt(10);
+        updates.passwordHash = await bcrypt.hash(newPassword, salt);
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await this.usersRepo.update(user.id, updates);
+      }
+
+      this.ok(res, { message: "Profile updated successfully" });
+    } catch (error) {
+      this.serverError(res, error, "Failed to update profile:");
+    }
+  };
+
+  deleteAccount = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const userId = req.userId!;
+      await this.usersRepo.hardDelete(userId);
+      res.clearCookie("token");
+      this.ok(res, { message: "Account deleted successfully" });
+    } catch (error) {
+      this.serverError(res, error, "Failed to delete account:");
+    }
+  };
 }

@@ -75,8 +75,16 @@ export default function ActionItemsSection({
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await axiosInstance.get<{ id: string; username: string }[]>("/auth/users");
-        setUsers(res.data);
+        const rawStorage = typeof window !== "undefined" ? localStorage.getItem("active-workspace-storage") : null;
+        const activeWsId = rawStorage ? JSON.parse(rawStorage)?.state?.activeWorkspace?.id : null;
+
+        if (activeWsId) {
+          const res = await axiosInstance.get(`/workspaces/${activeWsId}/members`);
+          setUsers(res.data.members || []);
+        } else {
+          const res = await axiosInstance.get<{ id: string; username: string }[]>("/auth/users");
+          setUsers(res.data || []);
+        }
       } catch (err) {
         console.error("Failed to fetch users", err);
       }

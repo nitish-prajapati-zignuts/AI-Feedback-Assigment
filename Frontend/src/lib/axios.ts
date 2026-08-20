@@ -17,6 +17,22 @@ axiosInstance.interceptors.request.use(
     const store = useProgressStore.getState();
     store.startRequest();
 
+    // Attach active workspace ID if present
+    if (typeof window !== "undefined") {
+      try {
+        const rawStorage = localStorage.getItem("active-workspace-storage");
+        if (rawStorage) {
+          const parsed = JSON.parse(rawStorage);
+          const activeWorkspaceId = parsed?.state?.activeWorkspace?.id;
+          if (activeWorkspaceId) {
+            config.headers["x-workspace-id"] = activeWorkspaceId;
+          }
+        }
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+
     // Track upload progress in real-time
     const originalOnUpload = config.onUploadProgress;
     config.onUploadProgress = (progressEvent) => {
