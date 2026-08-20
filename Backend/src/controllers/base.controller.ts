@@ -37,7 +37,7 @@ export class BaseController {
   }
 
   /**
-   * Sends a 500 Internal Server Error JSON response.
+   * Sends a 500 Internal Server Error JSON response from the .
    */
   protected serverError(res: Response, error: any, contextMessage: string = "Internal server error"): void {
     console.error(contextMessage, error);
