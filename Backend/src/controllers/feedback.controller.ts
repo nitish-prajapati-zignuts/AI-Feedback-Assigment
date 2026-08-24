@@ -2,6 +2,7 @@ import { Response } from "express";
 import { WorkspaceRequest } from "../middleware/rbac";
 import { z } from "zod";
 import { analyzeFeedback } from "../services/ai";
+import { generateEmbedding, buildFeedbackEmbeddingText, ragSearchAndAnswer } from "../services/rag";
 import { BaseController } from "./base.controller";
 import { IFeedbackRepository } from "../db/repositories/interfaces";
 import { container } from "../di";
@@ -140,6 +141,20 @@ export class FeedbackController extends BaseController {
         suggestedActions
       );
 
+      // Generate vector embedding for pgvector RAG searching
+      const embeddingText = buildFeedbackEmbeddingText({
+        title: body.title,
+        category: body.category,
+        content: sanitizedContent,
+        aiSummary: aiResult.summary,
+      });
+
+      const embedding = await generateEmbedding(embeddingText);
+      if (embedding) {
+        await this.feedbackRepo.updateEmbedding(newRecord.id, embedding);
+        newRecord.embedding = embedding;
+      }
+
       this.created(res, newRecord);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -158,19 +173,19 @@ export class FeedbackController extends BaseController {
       const parsedLimit = limit ? parseInt(limit as string) : undefined;
       const records = req.workspaceId
         ? await this.feedbackRepo.findManyByWorkspace(req.workspaceId, {
-            search: search as string,
-            category: category as string,
-            source: source as string,
-            status: status as string,
-            limit: parsedLimit && !isNaN(parsedLimit) ? parsedLimit : undefined,
-          })
+          search: search as string,
+          category: category as string,
+          source: source as string,
+          status: status as string,
+          limit: parsedLimit && !isNaN(parsedLimit) ? parsedLimit : undefined,
+        })
         : await this.feedbackRepo.findManyByUser(req.userId!, {
-            search: search as string,
-            category: category as string,
-            source: source as string,
-            status: status as string,
-            limit: parsedLimit && !isNaN(parsedLimit) ? parsedLimit : undefined,
-          });
+          search: search as string,
+          category: category as string,
+          source: source as string,
+          status: status as string,
+          limit: parsedLimit && !isNaN(parsedLimit) ? parsedLimit : undefined,
+        });
 
       this.ok(res, records);
     } catch (error) {
@@ -241,6 +256,23 @@ export class FeedbackController extends BaseController {
       }
 
       const updatedRecord = await this.feedbackRepo.update(id, body, aiUpdate);
+
+      // Regenerate vector embedding if text/title/category changed
+      if (body.title !== undefined || body.content !== undefined || body.category !== undefined) {
+        const embeddingText = buildFeedbackEmbeddingText({
+          title: updatedRecord.title,
+          category: updatedRecord.category,
+          content: updatedRecord.content,
+          aiSummary: updatedRecord.aiSummary,
+        });
+
+        const embedding = await generateEmbedding(embeddingText);
+        if (embedding) {
+          await this.feedbackRepo.updateEmbedding(id, embedding);
+          updatedRecord.embedding = embedding;
+        }
+      }
+
       this.ok(res, updatedRecord);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -315,6 +347,70 @@ Write a professional, polite, and helpful response address to ${record.customerN
       this.ok(res, { replyDraft: text, tone });
     } catch (error) {
       this.serverError(res, error, "Failed to generate reply draft:");
+    }
+  };
+
+  // POST /api/feedback/rag-search - RAG Vector Similarity Search & QA Synthesis
+  ragSearch = async (req: WorkspaceRequest, res: Response): Promise<void> => {
+    try {
+      const { query, limit = 5 } = req.body;
+      if (!query || typeof query !== "string" || query.trim() === "") {
+        this.badRequest(res, "Search query is required");
+        return;
+      }
+
+      if (!req.workspaceId) {
+        this.badRequest(res, "Workspace ID is required for RAG search");
+        return;
+      }
+
+      const parsedLimit = typeof limit === "number" ? limit : parseInt(limit, 10);
+      const result = await ragSearchAndAnswer(
+        req.workspaceId,
+        query.trim(),
+        this.feedbackRepo,
+        !isNaN(parsedLimit) ? parsedLimit : 5
+      );
+
+      this.ok(res, result);
+    } catch (error: any) {
+      this.serverError(res, error, "RAG search error:");
+    }
+  };
+
+  // POST /api/feedback/backfill-embeddings - Generate pgvector embeddings for missing records
+  backfillEmbeddings = async (req: WorkspaceRequest, res: Response): Promise<void> => {
+    try {
+      if (!req.workspaceId) {
+        this.badRequest(res, "Workspace ID is required");
+        return;
+      }
+
+      const missingFeedbacks = await this.feedbackRepo.findMissingEmbeddings(req.workspaceId);
+      let updatedCount = 0;
+
+      for (const item of missingFeedbacks) {
+        const textToEmbed = buildFeedbackEmbeddingText({
+          title: item.title,
+          category: item.category,
+          content: item.content,
+          aiSummary: item.aiSummary,
+        });
+
+        const embedding = await generateEmbedding(textToEmbed);
+        if (embedding) {
+          await this.feedbackRepo.updateEmbedding(item.id, embedding);
+          updatedCount++;
+        }
+      }
+
+      this.ok(res, {
+        message: `Successfully backfilled vector embeddings for ${updatedCount} feedback records.`,
+        totalFound: missingFeedbacks.length,
+        updatedCount,
+      });
+    } catch (error: any) {
+      this.serverError(res, error, "Backfill embeddings error:");
     }
   };
 }

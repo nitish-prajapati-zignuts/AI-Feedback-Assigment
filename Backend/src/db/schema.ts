@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, jsonb, boolean, vector } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey().$defaultFn(() => Math.random().toString(36).substring(2, 15)),
@@ -83,6 +83,7 @@ export const feedback = pgTable("feedback", {
   aiFeatureRequests: jsonb("ai_feature_requests"),
   aiActionItems: jsonb("ai_action_items"),
   aiInsights: jsonb("ai_insights"),
+  embedding: vector("embedding", { dimensions: 768 }),
   isDeleted: boolean("is_deleted").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

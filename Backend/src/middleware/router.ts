@@ -34,7 +34,9 @@ const routes: RouteDefinition[] = [
   { method: "PUT", pathPattern: /^\/api\/workspaces\/([^\/]+)\/members\/([^\/]+)$/, paramNames: ["workspaceId", "memberId"], controllerName: "workspaceController", actionName: "updateMemberRole", authenticate: true, requiredRoles: ["owner", "admin"] },
   { method: "DELETE", pathPattern: /^\/api\/workspaces\/([^\/]+)\/members\/([^\/]+)$/, paramNames: ["workspaceId", "memberId"], controllerName: "workspaceController", actionName: "removeMember", authenticate: true, requiredRoles: ["owner", "admin"] },
 
-  // Feedback CRUD
+  // Feedback CRUD & RAG
+  { method: "POST", pathPattern: /^\/api\/feedback\/rag-search$/, paramNames: [], controllerName: "feedbackController", actionName: "ragSearch", authenticate: true },
+  { method: "POST", pathPattern: /^\/api\/feedback\/backfill-embeddings$/, paramNames: [], controllerName: "feedbackController", actionName: "backfillEmbeddings", authenticate: true, requiredRoles: ["owner", "admin"] },
   { method: "POST", pathPattern: /^\/api\/feedback$/, paramNames: [], controllerName: "feedbackController", actionName: "createFeedback", authenticate: true, requiredRoles: ["owner", "admin", "editor"] },
   { method: "GET", pathPattern: /^\/api\/feedback$/, paramNames: [], controllerName: "feedbackController", actionName: "getFeedbackList", authenticate: true },
   { method: "GET", pathPattern: /^\/api\/feedback\/([^\/]+)$/, paramNames: ["id"], controllerName: "feedbackController", actionName: "getFeedbackDetails", authenticate: true },

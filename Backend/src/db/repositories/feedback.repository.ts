@@ -1,4 +1,4 @@
-import { eq, and, like, or, SQL, desc } from "drizzle-orm";
+import { eq, and, like, or, SQL, desc, cosineDistance, sql, isNotNull, isNull } from "drizzle-orm";
 import { feedback } from "../schema";
 import { BaseRepository } from "./base.repository";
 import { IFeedbackRepository } from "./interfaces";
@@ -200,5 +200,82 @@ export class FeedbackRepository extends BaseRepository<typeof feedback> implemen
         updatedAt: new Date(),
       })
       .where(eq(feedback.id, id));
+  }
+
+  /**
+   * Updates pgvector embedding for a feedback record.
+   */
+  async updateEmbedding(id: string, embedding: number[]): Promise<void> {
+    await this.client
+      .update(feedback)
+      .set({
+        embedding,
+        updatedAt: new Date(),
+      })
+      .where(eq(feedback.id, id));
+  }
+
+  /**
+   * Performs vector similarity search using pgvector cosine distance.
+   */
+  async vectorSearch(
+    workspaceId: string,
+    queryEmbedding: number[],
+    limit: number = 5
+  ): Promise<Array<any & { similarity: number }>> {
+    const similarity = sql<number>`1 - (${cosineDistance(feedback.embedding, queryEmbedding)})`;
+
+    const records = await this.client
+      .select({
+        id: feedback.id,
+        userId: feedback.userId,
+        workspaceId: feedback.workspaceId,
+        title: feedback.title,
+        customerName: feedback.customerName,
+        customerEmail: feedback.customerEmail,
+        feedbackDate: feedback.feedbackDate,
+        source: feedback.source,
+        content: feedback.content,
+        category: feedback.category,
+        status: feedback.status,
+        tags: feedback.tags,
+        aiSummary: feedback.aiSummary,
+        aiClassification: feedback.aiClassification,
+        aiSentimentAnalysis: feedback.aiSentimentAnalysis,
+        aiFeatureRequests: feedback.aiFeatureRequests,
+        aiActionItems: feedback.aiActionItems,
+        aiInsights: feedback.aiInsights,
+        createdAt: feedback.createdAt,
+        updatedAt: feedback.updatedAt,
+        similarity,
+      })
+      .from(feedback)
+      .where(
+        and(
+          eq(feedback.workspaceId, workspaceId),
+          eq(feedback.isDeleted, false),
+          isNotNull(feedback.embedding)
+        )
+      )
+      .orderBy(cosineDistance(feedback.embedding, queryEmbedding))
+      .limit(limit);
+
+    return records;
+  }
+
+  /**
+   * Finds active feedback records in a workspace missing vector embeddings.
+   */
+  async findMissingEmbeddings(workspaceId: string): Promise<any[]> {
+    return this.client
+      .select()
+      .from(feedback)
+      .where(
+        and(
+          eq(feedback.workspaceId, workspaceId),
+          eq(feedback.isDeleted, false),
+          isNull(feedback.embedding)
+        )
+      );
   }
 }

@@ -127,6 +127,9 @@ export interface IFeedbackRepository extends IRepository<any> {
   update(id: string, data: any, aiUpdate?: any): Promise<any>;
   delete(id: string, userId: string): Promise<void>;
   updateAiActionItems(id: string, items: any[]): Promise<void>;
+  updateEmbedding(id: string, embedding: number[]): Promise<void>;
+  vectorSearch(workspaceId: string, queryEmbedding: number[], limit?: number): Promise<Array<any & { similarity: number }>>;
+  findMissingEmbeddings(workspaceId: string): Promise<any[]>;
 }
 
 export interface IActionItemsRepository extends IRepository<ActionItem> {

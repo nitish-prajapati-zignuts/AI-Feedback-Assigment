@@ -38,6 +38,12 @@ app.listen(port, async () => {
     const { db } = await import("./db/index");
     await db.execute(sql`SELECT 1`);
     console.log("🚀 Database connected successfully to Neon!");
+    try {
+      await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector;`);
+      console.log("⚡ pgvector extension ensured!");
+    } catch (vErr) {
+      console.warn("⚠️ Could not ensure pgvector extension (might require superuser permissions or already exists):", vErr);
+    }
   } catch (error) {
     console.error("❌ Database connection test failed:", error);
   }
