@@ -16,7 +16,7 @@ const envSchema = z.object({
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
-  console.error("❌ Environment validation failed. Please check your Backend/.env file:");
+  console.error("Environment validation failed. Please check your Backend/.env file:");
   console.error(JSON.stringify(parsed.error.format(), null, 2));
   process.exit(1);
 }

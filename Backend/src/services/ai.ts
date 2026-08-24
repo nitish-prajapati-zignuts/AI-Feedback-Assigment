@@ -179,7 +179,7 @@ export async function analyzeFeedback(content: string, userCategory: string): Pr
           console.log(`Rotating Key #${i + 1} (${maskedKey})...`);
           const googleProvider = createGoogleGenerativeAI({ apiKey });
           const { object } = await generateObject({
-            model: googleProvider("gemini-1.5-flash"),
+            model: googleProvider("gemini-3.5-flash-lite"),
             schema: aiAnalysisResultSchema,
             prompt: promptText,
             system: systemPrompt,
@@ -209,7 +209,7 @@ export async function analyzeFeedback(content: string, userCategory: string): Pr
           console.log("Attempting Fallback Model Key (GEMINI_FALL_BACK_KEY)...");
           const googleProvider = createGoogleGenerativeAI({ apiKey: geminiFallbackKey });
           const { object } = await generateObject({
-            model: googleProvider("gemini-1.5-flash"),
+            model: googleProvider("gemini-3.5-flash-lite"),
             schema: aiAnalysisResultSchema,
             prompt: promptText,
             system: systemPrompt,
@@ -236,7 +236,7 @@ export async function analyzeFeedback(content: string, userCategory: string): Pr
               }
               return object as AIAnalysisResult;
             } catch (err: any) {
-              console.error("❌ [OpenAI Fallback Exception] OpenAI call failed:", err?.message || err);
+              console.error("[OpenAI Fallback Exception] OpenAI call failed:", err?.message || err);
             }
           }
         }

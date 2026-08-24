@@ -32,14 +32,14 @@ app.get("/health", (req, res) => {
 // Start Server
 app.listen(port, async () => {
   console.log(`Backend server is running on http://localhost:${port}`);
-  
+
   // Test database connection
   try {
     const { sql } = await import("drizzle-orm");
     const { db } = await import("./db/index");
     await db.execute(sql`SELECT 1`);
-    console.log("🚀 Database connected successfully to Neon!");
+    console.log("Database connected successfully to Neon!");
   } catch (error) {
-    console.error("❌ Database connection test failed:", error);
+    console.error("Database connection test failed:", error);
   }
 });
