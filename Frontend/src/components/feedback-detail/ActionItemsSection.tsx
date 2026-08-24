@@ -216,25 +216,27 @@ export default function ActionItemsSection({
               </h4>
               <div className="divide-y divide-border/40">
                 {aiActionItems.map((item) => (
-                  <div key={item.id} className="py-3 first:pt-0 last:pb-0 flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="text-xs font-medium text-foreground" dangerouslySetInnerHTML={{ __html: item.description }} />
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
-                        <span className="text-[10px] text-muted-foreground">Suggested Owner: <strong className="text-foreground/80">{item.owner}</strong></span>
-                        <span className="text-[10px] text-muted-foreground">•</span>
-                        <span className="text-[10px] text-muted-foreground">Priority:</span>
-                        <Badge variant={item.priority === "High" ? "destructive" : "secondary"} className="text-[9px] px-1.5 py-0 h-4">
-                          {item.priority}
-                        </Badge>
+                  <div key={item.id} className="py-3 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="text-xs font-medium text-foreground break-words" dangerouslySetInnerHTML={{ __html: item.description }} />
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[10px] text-muted-foreground">
+                        <span>Suggested Owner: <strong className="text-foreground/80">{item.owner}</strong></span>
+                        <span>•</span>
+                        <div className="flex items-center gap-1">
+                          <span>Priority:</span>
+                          <Badge variant={item.priority === "High" ? "destructive" : "secondary"} className="text-[9px] px-1.5 py-0 h-4">
+                            {item.priority}
+                          </Badge>
+                        </div>
                         {item.daysToComplete && (
                           <>
-                            <span className="text-[10px] text-muted-foreground">•</span>
-                            <span className="text-[10px] text-muted-foreground">Duration: <strong className="text-foreground/80">{item.daysToComplete} days</strong></span>
+                            <span>•</span>
+                            <span>Duration: <strong className="text-foreground/80">{item.daysToComplete} days</strong></span>
                           </>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex flex-wrap items-center gap-1.5 shrink-0 pt-1 sm:pt-0">
                       <Button
                         size="sm"
                         variant="default"
