@@ -11,11 +11,15 @@ const port = env.PORT;
 
 // Middleware
 app.use(cors({
-  origin: "http://localhost:3000",
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, postman) or any origin in dev
+    callback(null, true);
+  },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
+
 app.use(express.json());
 app.use(cookieParser());
 
