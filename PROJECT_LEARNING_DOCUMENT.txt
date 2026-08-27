@@ -1,0 +1,1607 @@
+================================================================================
+           AI CUSTOMER FEEDBACK & INSIGHTS TRACKER — LEARNING DOCUMENT
+================================================================================
+
+Created: August 2026
+Version: 1.4.0
+
+
+TABLE OF CONTENTS
+-----------------
+ 1. Project Overview
+ 2. Technology Stack (Full Breakdown)
+ 3. Project Folder Structure
+ 4. Environment Variables & Configuration
+ 5. Backend — Deep Dive
+    5.1  Entry Point (index.ts)
+    5.2  Configuration (config.ts)
+    5.3  Database Layer
+         5.3.1  Connection Setup (db/index.ts)
+         5.3.2  Schema / Models (db/schema.ts)
+         5.3.3  Migrations (db/migrate.ts + drizzle.config.ts)
+    5.4  Middleware
+         5.4.1  Authentication Middleware (middleware/auth.ts)
+    5.5  Controllers
+         5.5.1  Auth Controller (auth.controller.ts)
+         5.5.2  Feedback Controller (feedback.controller.ts)
+         5.5.3  Action Controller (action.controller.ts)
+         5.5.4  Note Controller (note.controller.ts)
+    5.6  Routes
+         5.6.1  Auth Routes (routes/auth.ts)
+         5.6.2  Feedback Routes (routes/feedback.ts)
+         5.6.3  Action Routes (routes/action.ts)
+    5.7  Services
+         5.7.1  AI Service (services/ai.ts)
+    5.8  Utilities
+         5.8.1  AI Prompts (utils/aiPrompts.ts)
+ 6. Frontend — Deep Dive
+    6.1  App Layout & Root (layout.tsx)
+    6.2  Pages (App Router)
+         6.2.1  Home / Root Page (page.tsx)
+         6.2.2  Login Page (login/page.tsx)
+         6.2.3  Signup Page (signup/page.tsx)
+         6.2.4  Chat Layout (chat/layout.tsx)
+         6.2.5  Dashboard Page (chat/page.tsx)
+         6.2.6  All Feedbacks Page (chat/all/page.tsx)
+         6.2.7  Create Feedback Page (chat/create/page.tsx)
+         6.2.8  Actions Tracker Page (chat/actions/page.tsx)
+         6.2.9  Feedback Detail Page (chat/[id]/page.tsx)
+         6.2.10 Edit Feedback Page (chat/[id]/edit/page.tsx)
+    6.3  Components
+         6.3.1  UI Components (Shadcn/Radix)
+         6.3.2  RichTextEditor (TinyMCE)
+         6.3.3  Feedback Detail Components
+         6.3.4  Action Tracker Components
+         6.3.5  PWA Components (InstallPrompt, RegisterSW)
+    6.4  State Management
+         6.4.1  Auth Context (context/AuthContext.tsx)
+         6.4.2  User Store (store/useUserStore.ts — Zustand)
+    6.5  Library / Utility Files
+         6.5.1  Axios Instance (lib/axios.ts)
+         6.5.2  Validation Schemas (lib/validation.ts)
+         6.5.3  Utils (lib/utils.ts)
+    6.6  Styling (globals.css & Tailwind)
+ 7. Database Design (Complete Schema)
+ 8. API Reference (All Endpoints)
+ 9. Authentication Flow (End-to-End)
+10. AI Integration Flow (End-to-End)
+11. Data Flow Diagrams
+12. Key Design Patterns Used
+13. How to Run the Project
+14. Known Limitations
+
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+This is a full-stack, AI-powered customer feedback analysis and action item
+tracking system. It enables teams to:
+
+  - Submit customer feedback entries through a rich-text form
+  - Automatically analyze feedback using Google Gemini AI (with OpenAI fallback)
+  - View AI-generated summaries, sentiment analysis, classifications,
+    feature requests, and actionable insights
+  - Track action items on a Kanban board or table view
+  - Write, edit, and delete internal notes for each feedback entry
+  - Filter and search across all feedback records
+  - Authenticate using cookie-based JWT sessions
+
+The application is structured as a monorepo with two independent applications:
+  - Backend/  → Express.js REST API (TypeScript)
+  - Frontend/ → Next.js 15 web application (App Router, TypeScript)
+
+Both are started concurrently from the root using the "concurrently" package.
+
+
+================================================================================
+2. TECHNOLOGY STACK (FULL BREAKDOWN)
+================================================================================
+
+BACKEND:
+  - Runtime:          Node.js (v18+)
+  - Framework:        Express.js v4.19.2
+  - Language:         TypeScript v5.5.4
+  - ORM:              Drizzle ORM v0.33.0
+  - Database:         PostgreSQL (hosted on Neon — serverless)
+  - DB Driver:        @neondatabase/serverless v0.9.4
+  - Authentication:   jsonwebtoken v9.0.2 (JWT), bcryptjs v2.4.3 (hashing)
+  - Cookie Handling:  cookie-parser v1.4.6
+  - CORS:             cors v2.8.5
+  - Env Management:   dotenv v16.4.5
+  - Validation:       Zod v3.23.8
+  - AI SDK:           Vercel AI SDK (ai v7.0.66)
+  - AI Providers:     @ai-sdk/google v4.0.44, @ai-sdk/openai v4.0.42
+  - Dev Server:       tsx v4.19.0 (watch mode)
+  - Migration Tool:   drizzle-kit v0.24.2
+
+FRONTEND:
+  - Framework:        Next.js 16.3.1 (App Router)
+  - React:            v19.2.8
+  - Language:         TypeScript v5
+  - Styling:          Tailwind CSS v4 + tw-animate-css
+  - UI Library:       Shadcn UI (via shadcn v4.18.0) + Radix UI (@base-ui/react)
+  - Form Handling:    React Hook Form v7.85.0 + @hookform/resolvers v5.9.1
+  - Validation:       Zod v3.25.76
+  - HTTP Client:      Axios v1.19.0
+  - State Management: Zustand v5.0.15 (global store)
+  - Rich Text:        TinyMCE v6.8.2 via @tinymce/tinymce-react v6.3.0
+  - Icons:            Lucide React v1.31.0
+  - Charts:           Recharts v3.10.1
+  - Theming:          next-themes v0.4.6 (dark/light mode)
+  - Utility:          clsx + tailwind-merge (class merging via CVA pattern)
+
+ROOT WORKSPACE:
+  - Task Runner:      concurrently v8.2.2 (runs both servers in parallel)
+
+
+================================================================================
+3. PROJECT FOLDER STRUCTURE
+================================================================================
+
+AI-Feedback/
+├── package.json                 # Root workspace — runs both apps via concurrently
+├── README.md                    # Main project documentation
+├── SHORT_REPORT.md              # Brief report summary
+│
+├── Backend/
+│   ├── .env                     # Environment variables (secrets, DB URL, API keys)
+│   ├── package.json             # Backend dependencies and scripts
+│   ├── tsconfig.json            # TypeScript compiler config (ES2022, ESNext modules)
+│   ├── drizzle.config.ts        # Drizzle Kit config for migration generation
+│   ├── dist/                    # Compiled JavaScript output (from tsc)
+│   └── src/
+│       ├── index.ts             # Express app entry point — server startup
+│       ├── config.ts            # Environment variable validation (Zod schema)
+│       ├── db/
+│       │   ├── index.ts         # Neon DB connection pool (Drizzle instance)
+│       │   ├── schema.ts        # All database table definitions (4 tables)
+│       │   ├── migrate.ts       # Migration runner script
+│       │   └── migrations/      # Auto-generated SQL migration files
+│       ├── middleware/
+│       │   └── auth.ts          # JWT cookie authentication middleware
+│       ├── controllers/
+│       │   ├── auth.controller.ts      # Signup, Login, Logout, Profile, GetAllUsers
+│       │   ├── feedback.controller.ts  # CRUD for feedback + AI analysis trigger
+│       │   ├── action.controller.ts    # CRUD for action items + approve/reject AI suggestions
+│       │   └── note.controller.ts      # CRUD for internal notes
+│       ├── routes/
+│       │   ├── auth.ts          # /api/auth/* route definitions
+│       │   ├── feedback.ts      # /api/feedback/* route definitions (includes notes)
+│       │   └── action.ts        # /api/* action item route definitions
+│       ├── services/
+│       │   └── ai.ts            # AI analysis engine (Gemini + fallback chain)
+│       └── utils/
+│           └── aiPrompts.ts     # System prompt and feedback prompt builder
+│
+├── Frontend/
+│   ├── package.json             # Frontend dependencies and scripts
+│   ├── tsconfig.json            # TypeScript config with path aliases (@/*)
+│   ├── next.config.ts           # Next.js configuration
+│   ├── postcss.config.mjs       # PostCSS config for Tailwind
+│   ├── eslint.config.mjs        # ESLint config
+│   ├── components.json          # Shadcn UI component configuration
+│   ├── AGENTS.md                # Agent instructions for frontend
+│   ├── public/                  # Static assets (icons, manifest)
+│   └── src/
+│       ├── app/
+│       │   ├── layout.tsx       # Root layout (providers, fonts, metadata)
+│       │   ├── page.tsx         # Root page — auth redirect logic
+│       │   ├── globals.css      # Tailwind + Shadcn CSS variables + custom scrollbar
+│       │   ├── manifest.ts      # PWA manifest generator
+│       │   ├── login/
+│       │   │   └── page.tsx     # Login form page
+│       │   ├── signup/
+│       │   │   └── page.tsx     # Registration form page
+│       │   └── chat/
+│       │       ├── layout.tsx   # Dashboard sidebar layout (navigation, logout, theme)
+│       │       ├── page.tsx     # Main Dashboard (stats cards, recent feedback, AI trends)
+│       │       ├── all/
+│       │       │   └── page.tsx # All Feedbacks listing with filters and search
+│       │       ├── create/
+│       │       │   └── page.tsx # Submit new feedback form
+│       │       ├── actions/
+│       │       │   └── page.tsx # Actions Tracker page (Kanban + Table toggle)
+│       │       └── [id]/
+│       │           ├── page.tsx # Feedback Detail view (AI analysis, actions, notes)
+│       │           └── edit/
+│       │               └── page.tsx  # Edit feedback form (not present, may be TBD)
+│       ├── components/
+│       │   ├── RichTextEditor.tsx          # TinyMCE wrapper (loaded from cdnjs)
+│       │   ├── install-prompt.tsx          # PWA install prompt component
+│       │   ├── register-sw.tsx            # Service worker registration
+│       │   ├── ui/                        # Shadcn UI primitives
+│       │   │   ├── badge.tsx
+│       │   │   ├── button.tsx
+│       │   │   ├── card.tsx
+│       │   │   ├── dialog.tsx
+│       │   │   ├── input.tsx
+│       │   │   ├── label.tsx
+│       │   │   ├── select.tsx
+│       │   │   ├── separator.tsx
+│       │   │   ├── table.tsx
+│       │   │   ├── textarea.tsx
+│       │   │   └── tooltip.tsx
+│       │   ├── feedback-detail/           # Feedback detail page components
+│       │   │   ├── types.ts               # TypeScript interfaces (Feedback, ActionItem, InternalNote)
+│       │   │   ├── MetadataHeader.tsx      # Feedback metadata header display
+│       │   │   ├── FeedbackAndSummary.tsx  # Content + AI summary display
+│       │   │   ├── AIAnalysisCards.tsx     # Sentiment + classification cards
+│       │   │   ├── FeatureRequestsCard.tsx # AI feature requests display
+│       │   │   ├── ActionItemsSection.tsx  # Action items CRUD section
+│       │   │   └── InternalNotesCard.tsx   # Internal notes CRUD section
+│       │   └── action-tracker/            # Actions tracker page components
+│       │       ├── types.ts               # GlobalActionItem interface
+│       │       ├── ActionsHeader.tsx       # Header with view toggle (Kanban/Table)
+│       │       ├── ActionsKanbanView.tsx   # Kanban board layout
+│       │       ├── ActionsTableView.tsx    # Table layout
+│       │       ├── EditActionDialog.tsx    # Edit action modal dialog
+│       │       └── DeleteActionDialog.tsx  # Delete confirmation dialog
+│       ├── context/
+│       │   └── AuthContext.tsx   # React Context for auth (login, register, logout, user)
+│       ├── store/
+│       │   └── useUserStore.ts  # Zustand global store for user state
+│       └── lib/
+│           ├── axios.ts         # Axios instance with interceptors + dynamic base URL
+│           ├── validation.ts    # Zod schemas for forms (auth, feedback, action items)
+│           └── utils.ts         # cn() utility — clsx + tailwind-merge
+
+
+================================================================================
+4. ENVIRONMENT VARIABLES & CONFIGURATION
+================================================================================
+
+BACKEND (.env file in Backend/ directory):
+---------------------------------------------------------------------------
+Variable                         | Description
+---------------------------------------------------------------------------
+PORT                             | Server port (default: 4000)
+JWT_SECRET                       | Secret key for signing JWT tokens
+DATABASE_URL                     | PostgreSQL connection string (Neon)
+GOOGLE_GENERATIVE_AI_API_KEY     | Primary Google Gemini API key
+GEMINI_FALL_BACK_KEY             | Fallback Gemini API key
+GEMINI_API_KEYS                  | Comma-separated list of rotation keys
+OPENAI_API_KEY                   | OpenAI API key (last-resort fallback)
+---------------------------------------------------------------------------
+
+The config.ts file uses Zod to validate these at startup:
+  - PORT defaults to "4000" if not specified
+  - JWT_SECRET is required (min 1 character)
+  - DATABASE_URL is required and must be a valid URL
+  - All AI keys are optional (the system degrades gracefully)
+
+If validation fails, the process exits with error details.
+
+FRONTEND (.env.local file in Frontend/ directory):
+---------------------------------------------------------------------------
+Variable                         | Description
+---------------------------------------------------------------------------
+NEXT_PUBLIC_API_URL              | Backend API base URL (e.g. http://localhost:4000/api)
+---------------------------------------------------------------------------
+
+The Axios instance also dynamically detects the hostname at runtime. If
+accessing from a LAN IP or custom domain (e.g. mobile testing), it
+auto-constructs the backend URL as: {protocol}//{hostname}:4000/api.
+
+
+================================================================================
+5. BACKEND — DEEP DIVE
+================================================================================
+
+
+5.1  ENTRY POINT — Backend/src/index.ts
+---------------------------------------
+
+This is the main file that boots the Express server.
+
+What it does:
+  1. Imports the validated environment config (env)
+  2. Creates an Express application instance
+  3. Configures global middleware:
+     - CORS: Allows all origins with credentials (cookies). Methods: GET, POST,
+       PUT, DELETE, OPTIONS. Headers: Content-Type, Authorization.
+     - JSON body parser: express.json()
+     - Cookie parser: cookieParser()
+  4. Mounts route groups:
+     - /api/auth     → auth routes (register, login, logout, me, users)
+     - /api/feedback → feedback routes (CRUD + notes)
+     - /api          → action item routes (CRUD + approve/reject)
+  5. Adds a /health endpoint returning { status: "ok", time }
+  6. Starts listening on the configured PORT
+  7. Tests the database connection with "SELECT 1" query on startup
+
+Key learning:
+  - The CORS origin callback always allows (callback(null, true)). This is
+    permissive and works for development. In production, you'd restrict origins.
+  - The database test query happens AFTER the server starts listening, so the
+    server is available even if the DB test fails.
+
+
+5.2  CONFIGURATION — Backend/src/config.ts
+------------------------------------------
+
+This file handles environment variable loading and validation.
+
+How it works:
+  1. Calls dotenv.config() to load Backend/.env
+  2. Defines a Zod schema (envSchema) for all expected variables
+  3. Uses safeParse(process.env) to validate
+  4. If validation fails: logs formatted errors and exits with code 1
+  5. If validation succeeds: exports the typed `env` object
+
+Key learning:
+  - Using Zod for env validation ensures the app fails fast with clear error
+    messages instead of cryptic runtime errors when keys are missing.
+  - The parsed `env` object is fully typed, so TypeScript catches any typos
+    when accessing env.PORT, env.JWT_SECRET, etc.
+
+
+5.3  DATABASE LAYER
+-------------------
+
+5.3.1  Connection Setup — Backend/src/db/index.ts
+
+  - Uses @neondatabase/serverless to create a Neon HTTP SQL client
+  - Wraps it with Drizzle ORM using drizzle(sql, { schema })
+  - Exports the `db` instance used throughout all controllers
+
+  The Neon driver uses HTTP-based queries (not traditional TCP connections),
+  making it ideal for serverless deployments.
+
+5.3.2  Schema / Models — Backend/src/db/schema.ts
+
+  This file defines 4 database tables using Drizzle ORM's pgTable builder:
+
+  TABLE: users
+  ┌─────────────┬───────────┬─────────────────────────────────────────────┐
+  │ Column       │ Type      │ Constraints                                │
+  ├─────────────┼───────────┼─────────────────────────────────────────────┤
+  │ id           │ text      │ PRIMARY KEY, auto-generated random string  │
+  │ username     │ text      │ NOT NULL, UNIQUE                           │
+  │ email        │ text      │ NOT NULL, default ""                       │
+  │ passwordHash │ text      │ NOT NULL (bcrypt hash)                     │
+  │ createdAt    │ timestamp │ DEFAULT now()                              │
+  │ updatedAt    │ timestamp │ DEFAULT now()                              │
+  └─────────────┴───────────┴─────────────────────────────────────────────┘
+
+  TABLE: feedback
+  ┌────────────────────┬───────────┬──────────────────────────────────────────────────┐
+  │ Column              │ Type      │ Constraints                                      │
+  ├────────────────────┼───────────┼──────────────────────────────────────────────────┤
+  │ id                  │ text      │ PRIMARY KEY, auto-generated                      │
+  │ userId              │ text      │ NOT NULL, FK → users.id (CASCADE delete)         │
+  │ title               │ text      │ NOT NULL                                         │
+  │ customerName        │ text      │ NOT NULL                                         │
+  │ customerEmail       │ text      │ NOT NULL                                         │
+  │ feedbackDate        │ timestamp │ DEFAULT now(), NOT NULL                          │
+  │ source              │ text enum │ NOT NULL — see enum values below                 │
+  │ content             │ text      │ NOT NULL                                         │
+  │ category            │ text enum │ NOT NULL — see enum values below                 │
+  │ status              │ text enum │ DEFAULT "New", NOT NULL                          │
+  │ aiSummary           │ jsonb     │ AI-generated summary object                      │
+  │ aiClassification    │ jsonb     │ AI-generated classification object               │
+  │ aiSentimentAnalysis │ jsonb     │ AI-generated sentiment data                      │
+  │ aiFeatureRequests   │ jsonb     │ AI-generated feature requests array              │
+  │ aiActionItems       │ jsonb     │ AI-suggested action items array                  │
+  │ aiInsights          │ jsonb     │ AI-generated insights array                      │
+  │ isDeleted           │ boolean   │ DEFAULT false, NOT NULL (soft delete flag)        │
+  │ createdAt           │ timestamp │ DEFAULT now()                                    │
+  │ updatedAt           │ timestamp │ DEFAULT now()                                    │
+  └────────────────────┴───────────┴──────────────────────────────────────────────────┘
+
+  Source enum values:
+    "Customer Support", "Survey", "Product Review", "Sales Team",
+    "Direct Feedback", "Internal Team", "Other"
+
+  Category enum values:
+    "Bug", "Feature Request", "Usability", "Performance",
+    "Billing", "Customer Service", "Product Experience", "Other"
+
+  Status enum values:
+    "New", "Under Review", "In Progress", "Resolved", "Closed"
+
+
+  TABLE: action_items
+  ┌─────────────┬───────────┬──────────────────────────────────────────────────┐
+  │ Column       │ Type      │ Constraints                                      │
+  ├─────────────┼───────────┼──────────────────────────────────────────────────┤
+  │ id           │ text      │ PRIMARY KEY, auto-generated                      │
+  │ feedbackId   │ text      │ NOT NULL, FK → feedback.id (CASCADE delete)      │
+  │ description  │ text      │ NOT NULL                                         │
+  │ owner        │ text      │ DEFAULT "Unassigned", NOT NULL                   │
+  │ dueDate      │ timestamp │ NOT NULL                                         │
+  │ priority     │ text enum │ DEFAULT "Medium", NOT NULL — Low/Medium/High     │
+  │ status       │ text enum │ DEFAULT "Open", NOT NULL                         │
+  │ isDeleted    │ boolean   │ DEFAULT false, NOT NULL                          │
+  │ createdAt    │ timestamp │ DEFAULT now()                                    │
+  │ updatedAt    │ timestamp │ DEFAULT now()                                    │
+  └─────────────┴───────────┴──────────────────────────────────────────────────┘
+
+  Action status enum values:
+    "Open", "In Progress", "Blocked", "Completed"
+
+  TABLE: internal_notes
+  ┌─────────────┬───────────┬──────────────────────────────────────────────────┐
+  │ Column       │ Type      │ Constraints                                      │
+  ├─────────────┼───────────┼──────────────────────────────────────────────────┤
+  │ id           │ text      │ PRIMARY KEY, auto-generated                      │
+  │ feedbackId   │ text      │ NOT NULL, FK → feedback.id (CASCADE delete)      │
+  │ content      │ text      │ NOT NULL                                         │
+  │ createdBy    │ text      │ NOT NULL (stores username, not user ID)          │
+  │ isDeleted    │ boolean   │ DEFAULT false, NOT NULL                          │
+  │ createdAt    │ timestamp │ DEFAULT now()                                    │
+  │ updatedAt    │ timestamp │ DEFAULT now()                                    │
+  └─────────────┴───────────┴──────────────────────────────────────────────────┘
+
+  RELATIONSHIPS:
+    users      1 ────→ ∞  feedback       (via userId FK)
+    feedback   1 ────→ ∞  action_items   (via feedbackId FK)
+    feedback   1 ────→ ∞  internal_notes (via feedbackId FK)
+
+  Key learning:
+    - Primary keys are random base-36 strings, NOT UUIDs or auto-increment IDs.
+      Generated via: Math.random().toString(36).substring(2, 15)
+    - All tables use "soft delete" (isDeleted boolean flag) rather than
+      physically removing rows.
+    - AI analysis results are stored as JSONB columns on the feedback table,
+      not in separate tables. This keeps queries simple and avoids JOINs.
+    - Foreign key cascade delete is configured, but since soft deletes are used,
+      the cascade only applies if you physically delete a parent record.
+
+
+5.3.3  Migrations — Backend/src/db/migrate.ts + drizzle.config.ts
+
+  drizzle.config.ts:
+    - Tells drizzle-kit where to find the schema (./src/db/schema.ts)
+    - Where to output migrations (./src/db/migrations)
+    - Dialect: PostgreSQL
+    - Reads DATABASE_URL from .env for connecting
+
+  migrate.ts:
+    - A standalone script that runs all pending migrations
+    - Uses drizzle-orm/neon-http/migrator
+    - Run via: npm run db:migrate (which calls tsx src/db/migrate.ts)
+
+  Migration workflow:
+    1. Edit schema.ts (add/change tables or columns)
+    2. Run "npm run db:generate" → creates new SQL migration files
+    3. Run "npm run db:migrate" → applies migrations to the database
+
+
+5.4  MIDDLEWARE
+--------------
+
+5.4.1  Authentication Middleware — Backend/src/middleware/auth.ts
+
+  Exports:
+    - AuthenticatedRequest interface (extends Express Request with userId?: string)
+    - authenticateToken function
+
+  How it works:
+    1. Reads the "token" from req.cookies (set during login/register)
+    2. If no token → responds 401 "Access token required"
+    3. Verifies the token using jwt.verify() with JWT_SECRET
+    4. If invalid/expired → responds 403 "Invalid or expired token"
+    5. If valid → extracts decoded.userId, sets req.userId, calls next()
+
+  Key learning:
+    - The token is stored in an HTTP-only cookie (not localStorage), which
+      prevents XSS attacks from stealing the token.
+    - All protected routes use this middleware, so req.userId is always available
+      in controller functions after authentication succeeds.
+    - The middleware is applied per-route-group (e.g., router.use(authenticateToken))
+      rather than globally, so auth routes like /register and /login are public.
+
+
+5.5  CONTROLLERS
+----------------
+
+5.5.1  Auth Controller — Backend/src/controllers/auth.controller.ts
+
+  Exports 5 functions:
+
+  a) registerUser(req, res)
+     - Validates body with Zod: { username (min 3), email (valid), password (min 6) }
+     - Checks if username already exists in DB
+     - Hashes password with bcrypt (10 salt rounds)
+     - Inserts new user into "users" table
+     - Signs a JWT token (expires in 7 days)
+     - Sets HTTP-only cookie named "token"
+     - Returns 201 with user data (id, username, email)
+
+  b) loginUser(req, res)
+     - Validates body with Zod: { username (min 3), password (min 6) }
+     - Looks up user by username
+     - Compares password hash using bcrypt.compare()
+     - Signs a JWT token (7 day expiry)
+     - Sets HTTP-only cookie
+     - Returns 200 with user data
+
+  c) logoutUser(req, res)
+     - Clears the "token" cookie
+     - Returns 200 "Logged out successfully"
+
+  d) getUserProfile(req, res)
+     - Requires authentication (uses AuthenticatedRequest)
+     - Looks up user by req.userId
+     - Returns { id, username, email }
+
+  e) getAllUsers(req, res)
+     - Requires authentication
+     - Returns all users with only { id, username, email } columns
+
+  Key learning:
+    - Cookie settings: httpOnly=true, secure=true in production, sameSite="lax",
+      maxAge=7 days. This balance of security settings prevents CSRF while
+      allowing same-site navigation.
+    - Zod validation errors return the first error message as a 400 response.
+
+
+5.5.2  Feedback Controller — Backend/src/controllers/feedback.controller.ts
+
+  Exports 5 functions:
+
+  a) createFeedback(req, res)
+     - Validates body with feedbackSchema (Zod)
+     - Sanitizes content using cleanContent() — strips HTML, Markdown, entities
+     - Calls analyzeFeedback() from AI service (the big AI call)
+     - Extracts AI-suggested action items and formats them with IDs
+     - Inserts feedback record with all AI fields populated
+     - Returns 201 with the new record
+
+  b) getFeedbackList(req, res)
+     - Accepts query params: search, category, source, status, limit
+     - Builds dynamic SQL conditions:
+       * Always filters by userId and isDeleted=false
+       * Optionally adds category, source, status exact matches
+       * Optionally adds search with LIKE on title, customerName, content
+     - Orders by createdAt DESC
+     - Supports optional limit parameter
+     - Returns array of matching feedback records
+
+  c) getFeedbackDetails(req, res)
+     - Takes :id from URL params
+     - Finds feedback by id + userId + isDeleted=false
+     - Returns 404 if not found
+     - Returns the full feedback record
+
+  d) updateFeedback(req, res)
+     - Takes :id from URL params
+     - Uses partial() Zod schema (all fields optional)
+     - Verifies ownership (userId match) and that record is not deleted
+     - If content or category changed → re-runs AI analysis
+     - Updates the record with new data + AI results
+     - Returns updated record
+
+  e) deleteFeedback(req, res)
+     - Takes :id from URL params
+     - Verifies ownership
+     - Performs soft delete (isDeleted=true) on:
+       * The feedback record itself
+       * All associated action_items (same feedbackId)
+       * All associated internal_notes (same feedbackId)
+     - This is a CASCADING SOFT DELETE
+
+  Helper: cleanContent(text)
+     - Strips HTML tags with regex
+     - Unescapes HTML entities (&nbsp;, &lt;, &gt;, &amp;, etc.)
+     - Strips Markdown syntax (headings, bold, italic, links, code, quotes)
+     - Normalizes whitespace and double newlines
+     - Returns clean plain text
+
+  Key learning:
+    - AI analysis is triggered synchronously during create and update. This means
+      the API response is delayed until the AI completes (can take several seconds).
+    - The feedbackSchema validates a comprehensive set of fields including enums
+      for source, category, and status.
+    - The AI-suggested action items are stored as JSONB in the feedback record,
+      NOT as actual action_items table rows. They become real rows only when
+      the user explicitly approves them.
+
+
+5.5.3  Action Controller — Backend/src/controllers/action.controller.ts
+
+  Exports 7 functions:
+
+  a) getAllActionItems(req, res)
+     - INNER JOINs actionItems with feedback to get feedbackTitle
+     - Filters by userId (via feedback ownership), isDeleted=false on both tables
+     - Returns all action items across all user feedback entries
+
+  b) getActionItems(req, res)
+     - Takes :feedbackId from params
+     - Verifies feedback ownership first
+     - Returns action items for that specific feedback
+
+  c) createActionItem(req, res)
+     - Validates body with actionItemSchema (description, owner, dueDate, priority, status)
+     - Verifies feedback ownership
+     - Inserts new action item
+
+  d) updateActionItem(req, res)
+     - Takes :id from params
+     - Uses partial schema (all fields optional)
+     - Finds existing item, verifies it's not deleted
+     - Verifies parent feedback ownership
+     - Updates the action item
+
+  e) deleteActionItem(req, res)
+     - Takes :id from params
+     - Verifies item exists and parent feedback ownership
+     - Soft deletes (isDeleted=true)
+
+  f) approveActionItemSuggestion(req, res)
+     - Takes :feedbackId from params and { id, description, owner, priority, dueDate } from body
+     - Finds the AI suggestion in feedback.aiActionItems by matching the suggestion id
+     - Creates a real action_items table row from the suggestion
+     - Removes the approved suggestion from the feedback's aiActionItems JSONB array
+     - Returns the new action item
+
+  g) rejectActionItemSuggestion(req, res)
+     - Takes :feedbackId from params and { id } from body
+     - Removes the rejected suggestion from feedback.aiActionItems JSONB array
+     - Does NOT create any action_items row
+
+  Key learning:
+    - The approve/reject workflow converts AI suggestions (stored as JSONB)
+      into real database records. This is a deliberate "human-in-the-loop"
+      design — AI suggests, human approves.
+    - The dueDate for approved items is calculated from daysToComplete if
+      not explicitly provided.
+
+
+5.5.4  Note Controller — Backend/src/controllers/note.controller.ts
+
+  Exports 4 functions:
+
+  a) createNote(req, res)
+     - Validates body: { content (min 1 char) }
+     - Verifies feedback ownership via helper function
+     - Looks up the user to get their username
+     - Inserts note with createdBy = user's username (not ID)
+     - Returns the new note
+
+  b) getNotes(req, res)
+     - Takes :feedbackId from params
+     - Verifies feedback ownership
+     - Returns all non-deleted notes, ordered by createdAt ASC
+
+  c) updateNote(req, res)
+     - Takes :id from params
+     - Validates body: { content }
+     - Finds the note, verifies it's not deleted
+     - Verifies parent feedback ownership
+     - Updates content and updatedAt
+
+  d) deleteNote(req, res)
+     - Takes :id from params
+     - Finds the note, verifies parent feedback ownership
+     - Soft deletes
+
+  Helper: verifyFeedbackOwner(feedbackId, userId)
+     - Checks if a feedback record exists that matches both the feedbackId
+       and the userId, and is not deleted
+     - Returns boolean
+
+  Key learning:
+    - Notes store the creator's username in createdBy, not their user ID.
+      This means if a username changes, old notes won't reflect the new name.
+    - All note operations first verify feedback ownership, ensuring users can
+      only interact with notes on their own feedback entries.
+
+
+5.6  ROUTES
+-----------
+
+5.6.1  Auth Routes — Backend/src/routes/auth.ts
+
+  Mounted at: /api/auth
+
+  POST /api/auth/register         → registerUser        (public)
+  POST /api/auth/login            → loginUser           (public)
+  POST /api/auth/logout           → logoutUser          (public)
+  GET  /api/auth/me               → getUserProfile      (authenticated)
+  GET  /api/auth/users            → getAllUsers          (authenticated)
+
+  Note: Only /me and /users use authenticateToken middleware individually.
+  The register, login, and logout routes are public.
+
+
+5.6.2  Feedback Routes — Backend/src/routes/feedback.ts
+
+  Mounted at: /api/feedback
+  All routes use authenticateToken (applied via router.use)
+
+  POST   /api/feedback                       → createFeedback
+  GET    /api/feedback                       → getFeedbackList
+  GET    /api/feedback/:id                   → getFeedbackDetails
+  PUT    /api/feedback/:id                   → updateFeedback
+  DELETE /api/feedback/:id                   → deleteFeedback
+
+  Internal Notes (nested under feedback):
+  POST   /api/feedback/:feedbackId/notes     → createNote
+  GET    /api/feedback/:feedbackId/notes     → getNotes
+  PUT    /api/feedback/notes/:id             → updateNote
+  DELETE /api/feedback/notes/:id             → deleteNote
+
+
+5.6.3  Action Routes — Backend/src/routes/action.ts
+
+  Mounted at: /api
+  All routes use authenticateToken (applied via router.use)
+
+  GET    /api/actions                                     → getAllActionItems
+  GET    /api/feedback/:feedbackId/actions                → getActionItems
+  POST   /api/feedback/:feedbackId/actions                → createActionItem
+  POST   /api/feedback/:feedbackId/actions/approve        → approveActionItemSuggestion
+  POST   /api/feedback/:feedbackId/actions/reject         → rejectActionItemSuggestion
+  PUT    /api/actions/:id                                 → updateActionItem
+  DELETE /api/actions/:id                                 → deleteActionItem
+
+
+5.7  SERVICES
+-------------
+
+5.7.1  AI Service — Backend/src/services/ai.ts
+
+  This is the most complex file in the backend. It handles the AI analysis
+  of customer feedback using a multi-provider fallback strategy.
+
+  SCHEMAS DEFINED:
+
+    sentimentAnalysisSchema:
+      - overallTone: "Positive" | "Neutral" | "Concerned" | "Heated"
+      - score: number (0-100, positivity score)
+      - breakdown: { positive, neutral, concerned, heated } (percentages)
+
+    featureRequestSchema:
+      - description: string
+      - reason: string
+      - impact: string
+      - priority: "Low" | "Medium" | "High" | "Critical"
+      - status: "Requested" | "Under Review" | "Planned" | "Deferred"
+
+    aiActionItemSchema:
+      - description: string
+      - owner: string (suggested team/person)
+      - priority: "Low" | "Medium" | "High"
+      - daysToComplete: number
+
+    aiAnalysisResultSchema (the master schema):
+      - summary: { mainConcern, importantDetails, expectations, impact, suggestedNextSteps }
+      - classification: { category, feedbackType, sentiment, priority, productArea }
+      - sentimentAnalysis: (sentimentAnalysisSchema)
+      - aiFeatureRequests: array of featureRequestSchema
+      - aiActionItems: array of aiActionItemSchema
+      - insights: array of strings
+
+  MAIN FUNCTION: analyzeFeedback(content, userCategory) → AIAnalysisResult
+
+    This function uses Vercel AI SDK's generateObject() to get structured JSON
+    output from AI models. It follows a 4-tier fallback strategy:
+
+    TIER 1: Primary Google Key (GOOGLE_GENERATIVE_AI_API_KEY)
+      → Uses gemini-3.5-flash-lite model
+      → If succeeds, returns immediately
+
+    TIER 2: Key Rotation Policy (GEMINI_API_KEYS — comma-separated)
+      → Tries each key sequentially
+      → Filters out the primary key to avoid duplicates
+      → If any succeeds, returns immediately
+
+    TIER 3: Fallback Gemini Key (GEMINI_FALL_BACK_KEY)
+      → Single dedicated fallback key
+      → If this fails, tries OpenAI
+
+    TIER 3.5: OpenAI Fallback (OPENAI_API_KEY)
+      → Uses gpt-4o-mini model
+      → Only attempted if OPENAI_API_KEY is configured
+
+    TIER 4: Heuristic Generator (hardcoded fallback)
+      → Returns a static, neutral analysis result
+      → Includes a warning that all API keys failed
+      → Suggests checking .env configuration
+
+  Helper: getRotationPolicyApiKeys()
+    - Parses GEMINI_API_KEYS env var (comma-separated)
+    - Cleans quotes and whitespace from each key
+    - De-duplicates using Set
+
+  Helper: toPlainText(text)
+    - Same HTML/Markdown stripping as cleanContent in feedback controller
+    - Used to sanitize content before sending to AI
+
+  Key learning:
+    - The generateObject() function from Vercel AI SDK ensures the AI returns
+      structured data matching the Zod schema. This is much more reliable than
+      parsing free-text AI responses.
+    - The fallback chain makes the system resilient — even if all Gemini keys
+      are rate-limited, it tries OpenAI, and even if that fails, it returns a
+      sensible hardcoded result so the user experience never breaks.
+    - Masked API keys are logged for debugging (first 4 + last 4 chars only).
+
+
+5.8  UTILITIES
+--------------
+
+5.8.1  AI Prompts — Backend/src/utils/aiPrompts.ts
+
+  Exports:
+
+    systemPrompt (string constant):
+      "You are an AI customer feedback analyst. Analyze the following customer
+      feedback and return a structured JSON analysis..."
+      Instructs the AI to:
+        - Cover main concern, details, expectations, impact, next steps
+        - Classify category, feedback type, sentiment, priority, product area
+        - Perform sentiment analysis with score and breakdown
+        - Extract feature requests (or empty array if none)
+        - Generate action items (or empty array if none needed)
+        - Extract key insights
+        - NOT make up facts
+
+    buildFeedbackPrompt(content, userCategory) → string:
+      Returns: 'Feedback Content:\n"{content}"\nUser Selected Category: {category}'
+
+
+================================================================================
+6. FRONTEND — DEEP DIVE
+================================================================================
+
+
+6.1  APP LAYOUT & ROOT — Frontend/src/app/layout.tsx
+----------------------------------------------------
+
+  This is the root layout that wraps every page in the application.
+
+  Provider hierarchy (outside-in):
+    <html> → <body> → ThemeProvider → TooltipProvider → AuthProvider → children
+
+  Configuration:
+    - Fonts: Inter (sans) + JetBrains Mono (mono) from Google Fonts
+    - Theme: Dark mode default (via next-themes, system detection disabled)
+    - Metadata: Title "AI Feedback Dashboard", PWA manifest reference, Apple Web App support
+    - Viewport: Theme color #090d16, no user scaling (maximumScale=1)
+
+  Additional components rendered:
+    - <RegisterSW /> — registers the service worker for PWA
+    - <InstallPrompt /> — shows PWA install banner
+
+  Key learning:
+    - The suppressHydrationWarning on <html> is needed because next-themes
+      modifies the class attribute at runtime (dark/light), which would cause
+      hydration mismatch warnings.
+    - PWA support is built in from the start with manifest and service worker.
+
+
+6.2  PAGES (App Router)
+-----------------------
+
+6.2.1  Home / Root Page — Frontend/src/app/page.tsx
+  - Client component ("use client")
+  - Checks auth state via useAuth()
+  - If authenticated → redirects to /chat (dashboard)
+  - If not authenticated → redirects to /login
+  - Shows a loading spinner during the check
+
+6.2.2  Login Page — Frontend/src/app/login/page.tsx
+  - Form with username and password fields
+  - Uses React Hook Form + Zod validation (authSchema)
+  - Calls login() from AuthContext on submit
+  - Shows error messages for invalid credentials
+  - Link to /signup for new users
+
+6.2.3  Signup Page — Frontend/src/app/signup/page.tsx
+  - Form with username, email, password, confirmPassword
+  - Uses React Hook Form + Zod validation (signupSchema with password match)
+  - Calls register() from AuthContext on submit
+  - Link to /login for existing users
+
+6.2.4  Chat Layout — Frontend/src/app/chat/layout.tsx
+  - Wraps all /chat/* pages
+  - Contains the sidebar navigation and header
+  - Sidebar nav items:
+    * Dashboard (/chat) — LayoutDashboard icon
+    * Feedbacks (/chat/all) — MessageSquareText icon
+    * Actions Tracker (/chat/actions) — ClipboardList icon
+    * Submit Feedback (/chat/create) — Plus icon
+  - Sidebar footer shows username avatar + logout button
+  - Header shows current page title + theme toggle (sun/moon)
+  - Mobile responsive: hamburger menu toggles sidebar overlay
+  - Active route highlighting based on pathname matching
+
+6.2.5  Dashboard Page — Frontend/src/app/chat/page.tsx
+  - Main dashboard with overview stats and recent activity
+  - Displays summary cards (total feedback, categories distribution)
+  - Shows latest 5 feedback entries
+  - AI Insights and Trends section (charts using Recharts)
+  - This is the largest page component (~67KB)
+
+6.2.6  All Feedbacks Page — Frontend/src/app/chat/all/page.tsx
+  - Complete feedback listing with multi-dimensional filtering
+  - Search bar (title, customer name, content)
+  - Filter dropdowns: category, source, status
+  - Table of all feedback records
+  - Click to navigate to feedback detail page
+
+6.2.7  Create Feedback Page — Frontend/src/app/chat/create/page.tsx
+  - Form to submit new customer feedback
+  - Fields: title, customerName, customerEmail, feedbackDate, source, content, category
+  - Content field uses the RichTextEditor (TinyMCE)
+  - Uses React Hook Form + Zod validation (feedbackSchema)
+  - Submits to POST /api/feedback
+
+6.2.8  Actions Tracker Page — Frontend/src/app/chat/actions/page.tsx
+  - Displays all action items across all feedback entries
+  - Toggle between Kanban board view and Table view
+  - Uses ActionsHeader, ActionsKanbanView, ActionsTableView components
+  - Fetches from GET /api/actions
+
+6.2.9  Feedback Detail Page — Frontend/src/app/chat/[id]/page.tsx
+  - Dynamic route for individual feedback detail
+  - Displays full feedback content, metadata, and all AI analysis
+  - Components used:
+    * MetadataHeader — date, source, category, status
+    * FeedbackAndSummary — raw content + AI summary
+    * AIAnalysisCards — sentiment analysis + classification
+    * FeatureRequestsCard — AI-extracted feature requests
+    * ActionItemsSection — CRUD for action items + approve/reject AI suggestions
+    * InternalNotesCard — CRUD for internal notes with rich text
+
+6.2.10 Edit Feedback Page — Frontend/src/app/chat/[id]/edit/
+  - Allows editing an existing feedback entry
+  - Pre-fills form with current values
+  - Re-triggers AI analysis if content/category changes
+
+
+6.3  COMPONENTS
+---------------
+
+6.3.1  UI Components (Shadcn/Radix) — Frontend/src/components/ui/
+  Standard Shadcn UI components built on Radix UI primitives:
+    - Badge: Status/priority labels with color variants
+    - Button: Primary, secondary, outline, ghost, destructive variants + sizes
+    - Card: Container with header, content, footer, title, description
+    - Dialog: Modal dialogs with overlay, content, header, footer
+    - Input: Text input field
+    - Label: Form field labels
+    - Select: Dropdown select with trigger, content, items
+    - Separator: Visual divider line
+    - Table: Data table with header, body, row, cell
+    - Textarea: Multi-line text input
+    - Tooltip: Hover tooltip with content, trigger, provider
+
+  These use the CVA (Class Variance Authority) pattern for variant management
+  and cn() utility for class merging.
+
+6.3.2  RichTextEditor — Frontend/src/components/RichTextEditor.tsx
+  - Wraps TinyMCE editor for rich-text editing
+  - Loaded via dynamic import (no SSR) to avoid Next.js hydration issues
+  - TinyMCE script loaded from cdnjs (bypasses API key requirement)
+  - Dark theme configured: oxide-dark skin, dark content CSS
+  - Toolbar: undo/redo, blocks, bold/italic/color, alignment, lists, remove format
+  - Plugins: advlist, autolink, lists, link, charmap, preview, anchor,
+    searchreplace, visualblocks, code, fullscreen, insertdatetime, table, wordcount
+
+6.3.3  Feedback Detail Components — Frontend/src/components/feedback-detail/
+
+    types.ts:
+      - Feedback interface (all fields including AI analysis)
+      - ActionItem interface (id, feedbackId, description, owner, dueDate, priority, status)
+      - InternalNote interface (id, feedbackId, content, createdBy, createdAt, updatedAt)
+
+    MetadataHeader.tsx:
+      - Shows feedback date, source badge, category badge, status badge
+
+    FeedbackAndSummary.tsx:
+      - Two-column layout: raw feedback content + AI summary
+      - Summary shows: mainConcern, importantDetails, expectations, impact, suggestedNextSteps
+
+    AIAnalysisCards.tsx:
+      - Displays AI classification (category, type, sentiment, priority, product area)
+      - Displays sentiment analysis (overall tone, score, breakdown percentages)
+
+    FeatureRequestsCard.tsx:
+      - Lists AI-extracted feature requests with description, reason, impact, priority, status
+
+    ActionItemsSection.tsx:
+      - Full CRUD for action items
+      - Shows AI-suggested items with approve/reject buttons
+      - Create new action item form
+      - Edit/delete existing items
+      - Largest component in this group (~25KB)
+
+    InternalNotesCard.tsx:
+      - Full CRUD for internal notes
+      - Uses RichTextEditor for creating/editing notes
+      - Displays HTML content safely
+      - Shows author name and timestamps
+
+6.3.4  Action Tracker Components — Frontend/src/components/action-tracker/
+
+    types.ts:
+      - GlobalActionItem interface (extends ActionItem with feedbackTitle)
+
+    ActionsHeader.tsx:
+      - Toggle between "Board" (Kanban) and "Table" views
+
+    ActionsKanbanView.tsx:
+      - Groups action items by status into 4 columns:
+        Open | In Progress | Blocked | Completed
+      - Drag-and-drop style layout (visual, not actual DnD)
+      - Each card shows: description, owner, priority badge, due date, feedback title
+
+    ActionsTableView.tsx:
+      - Tabular view of all action items
+      - Columns: Description, Feedback, Owner, Due Date, Priority, Status, Actions
+      - Edit/delete action buttons per row
+
+    EditActionDialog.tsx:
+      - Modal for editing an action item
+      - 3:2 column layout: description+dueDate+owner | priority+status
+      - Uses React Hook Form + Zod validation
+
+    DeleteActionDialog.tsx:
+      - Confirmation dialog for soft-deleting an action item
+
+6.3.5  PWA Components
+    InstallPrompt — Shows a banner prompting users to install the PWA
+    RegisterSW — Registers the service worker on mount
+
+
+6.4  STATE MANAGEMENT
+---------------------
+
+6.4.1  Auth Context — Frontend/src/context/AuthContext.tsx
+  - React Context providing auth state and functions
+  - State: user (User | null), isLoading (boolean)
+  - Derived: isAuthenticated (!!user)
+  - Functions: login(), register(), logout()
+  - On mount: calls GET /api/auth/me to check existing session
+  - Route protection effect:
+    * If not authenticated and not on /login or /signup → redirect to /login
+    * If authenticated and on /login or /signup → redirect to /chat
+  - Also syncs user state to Zustand store (useUserStore)
+
+6.4.2  User Store — Frontend/src/store/useUserStore.ts (Zustand)
+  - Lightweight global store for user info
+  - State: id, username, email (all nullable)
+  - Action: setUser() — updates all fields from user object or sets all to null
+  - Synced from AuthContext whenever user state changes
+  - Can be used in components that need user info without consuming the full AuthContext
+
+
+6.5  LIBRARY / UTILITY FILES
+-----------------------------
+
+6.5.1  Axios Instance — Frontend/src/lib/axios.ts
+  - Creates a configured Axios instance
+  - Base URL logic:
+    * Uses NEXT_PUBLIC_API_URL if set
+    * If accessing from non-localhost (LAN IP, ngrok) → auto-detects backend URL
+    * Fallback: http://localhost:4000/api
+  - withCredentials: true (sends cookies with every request)
+  - Request interceptor: Logs every outgoing request with method, URL, data
+  - Response interceptor:
+    * Success: Logs status code and response data
+    * Error: Extracts error message from response.data.error or error.message
+    * Returns rejected promise with a clean Error object
+
+6.5.2  Validation Schemas — Frontend/src/lib/validation.ts
+  - authSchema: { username (min 3), password (min 6) }
+  - signupSchema: extends auth + email + confirmPassword + password match refine
+  - feedbackSchema: { title, customerName, customerEmail, feedbackDate, source, content, category, status } — all with enum validations matching the backend
+  - actionItemSchema: { description, owner, dueDate, priority (Low/Medium/High), status (Open/In Progress/Blocked/Completed) }
+  - Exports TypeScript types: AuthInput, SignupInput, FeedbackInput, ActionItemInput
+
+6.5.3  Utils — Frontend/src/lib/utils.ts
+  - cn() function: Combines clsx and tailwind-merge
+  - Used throughout all Shadcn components for conditional class merging
+
+
+6.6  STYLING — Frontend/src/app/globals.css
+-------------------------------------------
+
+  - Imports: tailwindcss, tw-animate-css, shadcn/tailwind.css
+  - Defines CSS custom properties (variables) for the entire design system:
+
+  Light theme (:root):
+    - Neutral grayscale palette using oklch color space
+    - Clean white backgrounds, dark text
+
+  Dark theme (.dark):
+    - Deep dark backgrounds (oklch 0.145)
+    - Light text (oklch 0.985)
+    - Muted borders with 10-15% opacity
+
+  Theme variables include:
+    - background, foreground, card, popover, primary, secondary
+    - muted, accent, destructive, border, input, ring
+    - sidebar (separate color system), chart colors (5 levels)
+    - radius scale (sm through 4xl)
+
+  Custom styles:
+    - .no-scrollbar — hides scrollbar (webkit + firefox)
+    - Custom thin scrollbar styling (6px width, rounded thumb)
+    - Dark mode scrollbar colors
+    - Firefox compatibility via scrollbar-width/scrollbar-color
+
+
+================================================================================
+7. DATABASE DESIGN (COMPLETE SCHEMA)
+================================================================================
+
+  Entity Relationship:
+
+    ┌──────────────┐       ┌──────────────────┐       ┌──────────────────┐
+    │    USERS     │       │    FEEDBACK       │       │   ACTION_ITEMS   │
+    ├──────────────┤       ├──────────────────┤       ├──────────────────┤
+    │ id (PK)      │──1:∞──│ userId (FK)       │       │ id (PK)          │
+    │ username (UQ)│       │ id (PK)           │──1:∞──│ feedbackId (FK)  │
+    │ email        │       │ title             │       │ description      │
+    │ passwordHash │       │ customerName      │       │ owner            │
+    │ createdAt    │       │ customerEmail     │       │ dueDate          │
+    │ updatedAt    │       │ feedbackDate      │       │ priority (enum)  │
+    │              │       │ source (enum)     │       │ status (enum)    │
+    └──────────────┘       │ content           │       │ isDeleted        │
+                           │ category (enum)   │       │ createdAt        │
+                           │ status (enum)     │       │ updatedAt        │
+                           │ aiSummary (JSONB) │       └──────────────────┘
+                           │ aiClassification  │
+                           │   (JSONB)         │       ┌──────────────────┐
+                           │ aiSentimentAnalysis│       │  INTERNAL_NOTES  │
+                           │   (JSONB)         │       ├──────────────────┤
+                           │ aiFeatureRequests │       │ id (PK)          │
+                           │   (JSONB)         │──1:∞──│ feedbackId (FK)  │
+                           │ aiActionItems     │       │ content          │
+                           │   (JSONB)         │       │ createdBy        │
+                           │ aiInsights (JSONB)│       │ isDeleted        │
+                           │ isDeleted         │       │ createdAt        │
+                           │ createdAt         │       │ updatedAt        │
+                           │ updatedAt         │       └──────────────────┘
+                           └──────────────────┘
+
+  JSONB Field Structures:
+
+    aiSummary:
+      {
+        mainConcern: string,
+        importantDetails: string,
+        expectations: string,
+        impact: string,
+        suggestedNextSteps: string
+      }
+
+    aiClassification:
+      {
+        category: "Bug" | "Feature Request" | "Usability" | "Performance" | ...
+        feedbackType: "Bug Report" | "Feature Request" | "Complaint" | ...
+        sentiment: "Positive" | "Neutral" | "Negative" | "Frustrated" | "Very Positive"
+        priority: "Low" | "Medium" | "High" | "Critical"
+        productArea: string
+      }
+
+    aiSentimentAnalysis:
+      {
+        overallTone: "Positive" | "Neutral" | "Concerned" | "Heated"
+        score: number (0-100)
+        breakdown: {
+          positive: number (0-100),
+          neutral: number (0-100),
+          concerned: number (0-100),
+          heated: number (0-100)
+        }
+      }
+
+    aiFeatureRequests: Array of:
+      {
+        description: string,
+        reason: string,
+        impact: string,
+        priority: "Low" | "Medium" | "High" | "Critical",
+        status: "Requested" | "Under Review" | "Planned" | "Deferred"
+      }
+
+    aiActionItems: Array of:
+      {
+        id: string,
+        description: string,
+        owner: string,
+        priority: "Low" | "Medium" | "High",
+        daysToComplete: number
+      }
+
+    aiInsights: string[]
+
+
+================================================================================
+8. API REFERENCE (ALL ENDPOINTS)
+================================================================================
+
+  BASE URL: http://localhost:4000/api
+
+  ┌────────┬──────────────────────────────────────────────────┬─────────────┬─────────────────────────┐
+  │ Method │ Endpoint                                         │ Auth?       │ Description             │
+  ├────────┼──────────────────────────────────────────────────┼─────────────┼─────────────────────────┤
+  │ POST   │ /api/auth/register                               │ No          │ Register new user       │
+  │ POST   │ /api/auth/login                                  │ No          │ Login user              │
+  │ POST   │ /api/auth/logout                                 │ No          │ Logout (clear cookie)   │
+  │ GET    │ /api/auth/me                                     │ Yes         │ Get current user        │
+  │ GET    │ /api/auth/users                                  │ Yes         │ Get all users           │
+  ├────────┼──────────────────────────────────────────────────┼─────────────┼─────────────────────────┤
+  │ POST   │ /api/feedback                                    │ Yes         │ Create feedback + AI    │
+  │ GET    │ /api/feedback                                    │ Yes         │ List feedback (filtered)│
+  │ GET    │ /api/feedback/:id                                │ Yes         │ Get feedback details    │
+  │ PUT    │ /api/feedback/:id                                │ Yes         │ Update feedback (+ AI)  │
+  │ DELETE │ /api/feedback/:id                                │ Yes         │ Soft-delete (cascade)   │
+  ├────────┼──────────────────────────────────────────────────┼─────────────┼─────────────────────────┤
+  │ POST   │ /api/feedback/:feedbackId/notes                  │ Yes         │ Create internal note    │
+  │ GET    │ /api/feedback/:feedbackId/notes                  │ Yes         │ List notes for feedback │
+  │ PUT    │ /api/feedback/notes/:id                          │ Yes         │ Update a note           │
+  │ DELETE │ /api/feedback/notes/:id                          │ Yes         │ Soft-delete a note      │
+  ├────────┼──────────────────────────────────────────────────┼─────────────┼─────────────────────────┤
+  │ GET    │ /api/actions                                     │ Yes         │ Get all action items    │
+  │ GET    │ /api/feedback/:feedbackId/actions                │ Yes         │ Actions for feedback    │
+  │ POST   │ /api/feedback/:feedbackId/actions                │ Yes         │ Create action item      │
+  │ POST   │ /api/feedback/:feedbackId/actions/approve        │ Yes         │ Approve AI suggestion   │
+  │ POST   │ /api/feedback/:feedbackId/actions/reject         │ Yes         │ Reject AI suggestion    │
+  │ PUT    │ /api/actions/:id                                 │ Yes         │ Update action item      │
+  │ DELETE │ /api/actions/:id                                 │ Yes         │ Soft-delete action item │
+  ├────────┼──────────────────────────────────────────────────┼─────────────┼─────────────────────────┤
+  │ GET    │ /health                                          │ No          │ Health check            │
+  └────────┴──────────────────────────────────────────────────┴─────────────┴─────────────────────────┘
+
+  Query parameters for GET /api/feedback:
+    - search: string (LIKE match on title, customerName, content)
+    - category: enum string
+    - source: enum string
+    - status: enum string
+    - limit: number (max records to return)
+
+
+================================================================================
+9. AUTHENTICATION FLOW (END-TO-END)
+================================================================================
+
+  REGISTRATION FLOW:
+
+    Frontend                              Backend
+    ─────────                             ───────
+    1. User fills signup form
+       (username, email, password,
+        confirmPassword)
+    2. Zod validation on frontend
+       (signupSchema with password match)
+    3. POST /api/auth/register  ────────→ 4. Validate with registerSchema (Zod)
+                                          5. Check username uniqueness in DB
+                                          6. Hash password (bcrypt, 10 rounds)
+                                          7. Insert user into "users" table
+                                          8. Sign JWT { userId } (7 day expiry)
+                                          9. Set HTTP-only cookie "token"
+    10. Receive user data        ←─────── 10. Return 201 { user: { id, username, email } }
+    11. Set user in AuthContext
+    12. Sync to Zustand store
+    13. Redirect to /chat
+
+  LOGIN FLOW:
+
+    Frontend                              Backend
+    ─────────                             ───────
+    1. User fills login form
+       (username, password)
+    2. Zod validation (authSchema)
+    3. POST /api/auth/login     ────────→ 4. Validate with authSchema (Zod)
+                                          5. Find user by username
+                                          6. Compare password with bcrypt
+                                          7. Sign JWT { userId } (7 day expiry)
+                                          8. Set HTTP-only cookie "token"
+    9. Receive user data         ←─────── 9. Return 200 { user: { id, username, email } }
+    10. Set user in AuthContext
+    11. Sync to Zustand store
+    12. Redirect to /chat
+
+  SESSION CHECK (On every app load):
+
+    Frontend                              Backend
+    ─────────                             ───────
+    1. AuthContext mounts
+    2. GET /api/auth/me         ────────→ 3. authenticateToken middleware
+       (cookie sent automatically)        4. Read "token" from cookies
+                                          5. Verify JWT → extract userId
+                                          6. Look up user in DB
+    7. Receive user data         ←─────── 7. Return { id, username, email }
+       OR set user=null if 401/403
+
+  LOGOUT FLOW:
+
+    Frontend                              Backend
+    ─────────                             ───────
+    1. User clicks logout
+    2. POST /api/auth/logout    ────────→ 3. Clear "token" cookie
+    4. Set user=null in context  ←─────── 4. Return 200
+    5. Clear Zustand store
+    6. Redirect to /login
+
+  ROUTE PROTECTION:
+    - AuthContext has a useEffect that watches user state and pathname
+    - If user is null and not on /login or /signup → force redirect to /login
+    - If user exists and on /login or /signup → redirect to /chat
+
+
+================================================================================
+10. AI INTEGRATION FLOW (END-TO-END)
+================================================================================
+
+  When user creates or updates feedback:
+
+    Frontend                    Backend Controller            AI Service
+    ─────────                   ──────────────────            ──────────
+    1. Submit form
+    2. POST /api/feedback  ──→  3. Validate input
+                                4. cleanContent()
+                                   (strip HTML/MD)
+                                5. analyzeFeedback()  ──────→ 6. Sanitize content
+                                                              7. Build prompt
+                                                              8. TRY Primary Key
+                                                                 (gemini-3.5-flash-lite)
+                                                              9. IF fails → TRY rotation keys
+                                                              10. IF fails → TRY fallback key
+                                                              11. IF fails → TRY OpenAI
+                                                              12. IF all fail → return hardcoded
+                                13. Receive AI result  ←────── 13. Return structured JSON
+                                14. Format action items
+                                    (add IDs)
+                                15. Insert feedback +
+                                    all AI fields
+    16. Display results   ←──── 16. Return 201 + record
+
+  AI Analysis Output Structure:
+
+    The AI returns a single structured object containing:
+
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │  summary                                                           │
+    │  ├── mainConcern: "Customer reports slow loading..."               │
+    │  ├── importantDetails: "Issue occurs on mobile..."                 │
+    │  ├── expectations: "Customer expects 2s page loads..."             │
+    │  ├── impact: "Losing 30% of mobile users..."                      │
+    │  └── suggestedNextSteps: "Audit mobile performance..."             │
+    ├─────────────────────────────────────────────────────────────────────┤
+    │  classification                                                    │
+    │  ├── category: "Performance"                                       │
+    │  ├── feedbackType: "Bug Report"                                    │
+    │  ├── sentiment: "Frustrated"                                       │
+    │  ├── priority: "High"                                              │
+    │  └── productArea: "Mobile App"                                     │
+    ├─────────────────────────────────────────────────────────────────────┤
+    │  sentimentAnalysis                                                 │
+    │  ├── overallTone: "Concerned"                                      │
+    │  ├── score: 25                                                     │
+    │  └── breakdown: { positive: 5, neutral: 20, concerned: 60, heated: 15 } │
+    ├─────────────────────────────────────────────────────────────────────┤
+    │  aiFeatureRequests: [                                              │
+    │    { description: "Add caching layer",                             │
+    │      reason: "Reduce API calls", priority: "High", ... }           │
+    │  ]                                                                 │
+    ├─────────────────────────────────────────────────────────────────────┤
+    │  aiActionItems: [                                                  │
+    │    { description: "Run performance audit",                         │
+    │      owner: "Engineering Team", priority: "High",                  │
+    │      daysToComplete: 3 }                                           │
+    │  ]                                                                 │
+    ├─────────────────────────────────────────────────────────────────────┤
+    │  insights: [                                                       │
+    │    "Mobile users disproportionately affected",                     │
+    │    "Issue correlates with recent v3.2 deployment"                  │
+    │  ]                                                                 │
+    └─────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+11. DATA FLOW DIAGRAMS
+================================================================================
+
+  OVERALL REQUEST FLOW:
+
+    Browser (Next.js)
+        │
+        │  HTTP Request (with cookie)
+        ▼
+    Express Server (index.ts)
+        │
+        │  CORS → JSON Parser → Cookie Parser
+        ▼
+    Route Matcher (routes/*.ts)
+        │
+        │  authenticateToken (middleware)
+        ▼
+    Controller (controllers/*.ts)
+        │
+        ├── Validation (Zod)
+        ├── Business Logic
+        ├── AI Service (if needed)
+        │
+        ▼
+    Drizzle ORM (db/index.ts)
+        │
+        │  SQL over HTTP
+        ▼
+    Neon PostgreSQL (cloud)
+
+
+  STATE MANAGEMENT FLOW (Frontend):
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │                      AuthContext                             │
+    │  ┌─────────────┐    ┌──────────────┐    ┌──────────────┐   │
+    │  │ user state   │───→│ Zustand Store │    │ route guard   │   │
+    │  │ isLoading    │    │ (useUserStore)│    │ (useEffect)   │   │
+    │  └──────────────┘    └──────────────┘    └──────────────┘   │
+    │       │                     │                                │
+    │       ▼                     ▼                                │
+    │  Components consume    Components consume                    │
+    │  via useAuth()         via useUserStore()                    │
+    └─────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+12. KEY DESIGN PATTERNS USED
+================================================================================
+
+  1. MONOREPO PATTERN
+     - Backend/ and Frontend/ in one repository
+     - Root package.json runs both concurrently
+     - Shared nothing architecture (each has own dependencies)
+
+  2. MVC PATTERN (Backend)
+     - Models: db/schema.ts (Drizzle table definitions)
+     - Views: N/A (REST API returns JSON)
+     - Controllers: controllers/*.ts (business logic)
+     - Routes: routes/*.ts (URL mapping)
+
+  3. MIDDLEWARE PATTERN
+     - Express middleware chain for auth
+     - Applied per-route-group, not globally
+
+  4. REPOSITORY PATTERN (via ORM)
+     - Drizzle ORM abstracts SQL queries
+     - Controllers use db.query.* and db.insert/update for data access
+
+  5. SOFT DELETE PATTERN
+     - isDeleted flag instead of hard deletes
+     - All queries filter by isDeleted=false
+     - Cascade soft-delete for parent→child relationships
+
+  6. FALLBACK/RETRY PATTERN (AI Service)
+     - Multi-tier fallback: Primary → Rotation → Fallback → OpenAI → Heuristic
+     - System never crashes due to AI failure
+
+  7. CONTEXT + STORE PATTERN (Frontend)
+     - React Context for auth (provides functions + state)
+     - Zustand for lightweight global state (user info)
+     - Components choose which to consume based on needs
+
+  8. CONTAINER/COMPONENT PATTERN (Frontend)
+     - Pages (app/chat/*.tsx) are containers — fetch data, manage state
+     - Components (components/*.tsx) are presentational — receive props, render UI
+
+  9. SCHEMA-FIRST VALIDATION
+     - Zod schemas defined once, used for both validation and TypeScript types
+     - Backend and frontend both use Zod (schemas are duplicated but consistent)
+
+  10. HUMAN-IN-THE-LOOP AI PATTERN
+     - AI generates suggestions (stored as JSONB)
+     - User explicitly approves or rejects
+     - Approved items become real database records
+
+
+================================================================================
+13. HOW TO RUN THE PROJECT
+================================================================================
+
+  PREREQUISITES:
+    - Node.js v18 or higher
+    - A Neon PostgreSQL database instance
+    - Google Gemini API key(s) and/or OpenAI API key
+
+  STEP 1: Clone and install root dependencies
+    cd AI-Feedback
+    npm install
+
+  STEP 2: Set up Backend environment
+    - Create/edit Backend/.env with:
+      PORT=4000
+      JWT_SECRET=your-secret-key
+      DATABASE_URL=postgresql://user:pass@host/dbname?sslmode=require
+      GOOGLE_GENERATIVE_AI_API_KEY=your-primary-gemini-key
+      GEMINI_FALL_BACK_KEY=your-fallback-key (optional)
+      GEMINI_API_KEYS=key1,key2,key3 (optional, for rotation)
+      OPENAI_API_KEY=your-openai-key (optional fallback)
+
+  STEP 3: Install Backend dependencies
+    cd Backend
+    npm install
+
+  STEP 4: Generate and run database migrations
+    npm run db:generate
+    npm run db:migrate
+
+  STEP 5: Install Frontend dependencies
+    cd ../Frontend
+    npm install
+
+  STEP 6: Set up Frontend environment (optional)
+    - Create Frontend/.env.local with:
+      NEXT_PUBLIC_API_URL=http://localhost:4000/api
+
+  STEP 7: Run both servers from root
+    cd ..
+    npm run dev
+
+    This starts:
+      - Backend on http://localhost:4000
+      - Frontend on http://localhost:3000
+
+  ALTERNATIVE: Run individually
+    Terminal 1: cd Backend && npm run dev
+    Terminal 2: cd Frontend && npm run dev
+
+  NPM SCRIPTS REFERENCE:
+
+    Root:
+      npm run dev          → Runs both Backend and Frontend concurrently
+
+    Backend:
+      npm run dev          → tsx watch src/index.ts (hot-reload dev server)
+      npm run build        → tsc (compile TypeScript)
+      npm start            → node dist/index.js (run compiled)
+      npm run db:generate  → drizzle-kit generate (create migration files)
+      npm run db:migrate   → tsx src/db/migrate.ts (apply migrations)
+
+    Frontend:
+      npm run dev          → next dev (development server with HMR)
+      npm run build        → next build (production build)
+      npm start            → next start (serve production build)
+      npm run lint         → eslint (code quality check)
+
+
+================================================================================
+14. KNOWN LIMITATIONS
+================================================================================
+
+  1. AI LATENCY: The AI analysis runs synchronously during feedback create/update.
+     Users must wait several seconds for the API response. There is no background
+     job queue or async processing.
+
+  2. RICH TEXT TRUNCATION: HTML content inside table listings is truncated to
+     plain text summaries for readability. Full rich text only shows in detail views.
+
+  3. ONLINE DEPENDENCY: Requires internet for Neon PostgreSQL and Gemini/OpenAI APIs.
+     The app cannot run fully offline.
+
+  4. NO PAGINATION: Feedback listing returns all records matching the filter.
+     For large datasets, this could become slow. The only limit mechanism is the
+     optional "limit" query parameter.
+
+  5. NO RBAC: All authenticated users have equal permissions. No admin, manager,
+     or agent role distinctions.
+
+  6. USERNAME IMMUTABILITY: Notes store createdBy as username string, not FK.
+     If username changes, historical notes won't reflect the updated name.
+
+  7. NO RATE LIMITING: API has no rate limiting middleware. Susceptible to abuse
+     in production without additional infrastructure.
+
+  8. NO TESTS: No unit tests, integration tests, or e2e tests exist.
+     Verification is manual only.
+
+  9. CORS WIDE OPEN: The CORS configuration allows all origins. In production,
+     this should be restricted to the frontend domain only.
+
+  10. DUPLICATE VALIDATION: Zod schemas are defined separately in both Backend
+      and Frontend. Changes must be synchronized manually.
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

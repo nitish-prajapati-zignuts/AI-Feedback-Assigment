@@ -5,6 +5,8 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth";
 import feedbackRoutes from "./routes/feedback";
 import actionRoutes from "./routes/action";
+import { sql } from "drizzle-orm"
+import { db } from "./db/index"
 
 const app = express();
 const port = env.PORT;
@@ -12,7 +14,6 @@ const port = env.PORT;
 // Middleware
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, postman) or any origin in dev
     callback(null, true);
   },
   credentials: true,
@@ -39,8 +40,6 @@ app.listen(port, async () => {
 
   // Test database connection
   try {
-    const { sql } = await import("drizzle-orm");
-    const { db } = await import("./db/index");
     await db.execute(sql`SELECT 1`);
     console.log("Database connected successfully to Neon!");
   } catch (error) {
